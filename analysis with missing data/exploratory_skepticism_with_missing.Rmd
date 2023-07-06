@@ -1,0 +1,1156 @@
+---
+title: "Exploratory Skepticism Analyses with Missing Data"
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+date: "2023-03-29"
+editor_options: 
+  chunk_output_type: console
+---
+
+To do:
+
+  * post-hoc power analyses
+  * consumer behaviors analyses
+  * add effect sizes to simple effects analyses
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r clear environment, echo = FALSE}
+rm(list = ls())
+```
+
+
+```{r libraries, message = FALSE, warning = FALSE}
+library(Rmisc)
+library(Hmisc)
+library(rio)
+library(tidyverse)
+library(psych)
+library(gtools) # rbinding data frames
+library(corrplot)
+library(jtools) # for pretty printing tables
+library(sjPlot) # pretty printing tables
+library(sjmisc) # pretty printing
+library(mice) # handling missing values
+library(naniar) # visualizaing missingness & MCAR test
+library(miceadds) # for mi.anova
+library(emmeans) # simple effects analyses
+library(broom)     # for extracting residuals and outlier indices
+library(olsrr)     # for creating outlier plots
+library(effectsize)
+
+options(scipen = 10000)
+options(max.print = 100000)
+```
+
+# Data Import & Cleaning
+
+## Import data
+```{r import data}
+raw_psych_hum_subj <- import("data/raw/raw_psych_hum_subj.csv")
+raw_mktg_hum_subj <- import("data/raw/raw_mktg_hum_subj.csv")
+raw_gen_uo_pop <- import("data/raw/raw_gen_uo_pop.csv")
+pre_fall22 <- import("data/prescreen/dittersdorf_matches_f22.csv")
+pre_winter23 <- import("data/prescreen/dittersdorf_matches_w23.csv")
+pre_spring23 <- import("data/prescreen/dittersdorf_matches_s23.csv")
+participant_list <- import("data/prescreen/dittersdorf_participants.csv")
+```
+
+
+Inspect data
+```{r inspect raw data, results = 'hide'}
+# Main Data
+str(raw_psych_hum_subj, list.len = ncol(raw_psych_hum_subj))
+str(raw_mktg_hum_subj, list.len = ncol(raw_mktg_hum_subj))
+str(raw_gen_uo_pop, list.len = ncol(raw_gen_uo_pop))
+```
+
+
+## Change variables types 
+```{r update var types, warning = FALSE}
+raw_psych_hum_subj <- raw_psych_hum_subj %>%
+  mutate(Age = as.integer(Age),
+         Gender = as.factor(Gender),
+         framing_condition_DO = as.factor(framing_condition_DO),
+         norm_condition_DO = as.factor(norm_condition_DO),
+         consumer_behaviors = as.factor(consumer_behaviors),
+         skepticism = as.factor(skepticism),
+         id = as.factor(id))
+
+raw_mktg_hum_subj <- raw_mktg_hum_subj %>%
+  mutate(Age = as.integer(Age),
+         Gender = as.factor(Gender),
+         Gender_5_TEXT = as.character(Gender_5_TEXT),
+         Class_Lvl_7_TEXT = as.character(Class_Lvl_7_TEXT),
+         Pol_Ornt_8_TEXT = as.character(Pol_Ornt_8_TEXT),
+         Ethnicity_8_TEXT = as.character(Ethnicity_8_TEXT),
+         skept_open = as.character(skept_open),
+         skepticism = as.factor(skepticism),
+         id = as.factor(id),
+         framing_condition_DO = as.factor(framing_condition_DO),
+         norm_condition_DO = as.factor(norm_condition_DO),
+         consumer_behaviors = as.factor(consumer_behaviors))
+
+raw_gen_uo_pop <- raw_gen_uo_pop %>%
+  mutate(Gender = as.factor(Gender),
+         Gender_5_TEXT = as.character(Gender_5_TEXT),
+         Class_Lvl_7_TEXT = as.character(Class_Lvl_7_TEXT),
+         Pol_Ornt_8_TEXT = as.character(Pol_Ornt_8_TEXT),
+         skept_open = as.character(skept_open),
+         skepticism = as.factor(skepticism),
+         id = as.factor(id),
+         framing_condition_DO = as.factor(framing_condition_DO),
+         norm_condition_DO = as.factor(norm_condition_DO),
+         consumer_behaviors = as.factor(consumer_behaviors))
+```
+
+
+Inspect prescreen data
+```{r inspect prescreen, results = 'hide'}
+# Prescreen Data
+str(pre_fall22, list.len = ncol(pre_fall22))
+str(pre_winter23, list.len = ncol(pre_winter23))
+str(pre_spring23, list.len = ncol(pre_spring23))
+str(participant_list, list.len = ncol(participant_list))
+```
+
+Variables from prescreen:
+
+* Values:
+  + respecting, unity, protecting, preventing, equality, peace, justice, helpful, power, wealth, authority, influential, ambition, pleasures, enjoying, gratification
+
+* Socially Desirable Responding:
+  + honest, like, disturbing, regret, lose-out, rational, confident, lover, lies, cover-up, advantage, get-even, behind-back, private-talk, take-things, gossip
+
+## Combine prescreen data
+
+Specify unique variables to combine prescreen data sets
+```{r prep prescreen dfs}
+# Create unique full_name variable
+pre_fall22$full_name <- paste(pre_fall22$first_name, pre_fall22$last_name, sep="_")
+
+pre_winter23$full_name <- paste(pre_winter23$first_name, pre_winter23$last_name, sep="_")
+
+pre_spring23$full_name <- paste(pre_spring23$first_name, pre_spring23$last_name, sep="_")
+
+participant_list$full_name <- paste(participant_list$first_name, participant_list$last_name, sep="_")
+
+# Create column indicating which data set rows came from
+
+pre_fall22 <- pre_fall22 %>%
+  mutate(term = "fall22")
+
+pre_winter23 <- pre_winter23 %>%
+  mutate(term = "winter23")
+
+pre_spring23 <- pre_spring23 %>%
+  mutate(term = "spring23")
+```
+
+Combine prescreen data
+```{r combine prescreen dfs}
+combine1 <- smartbind(pre_fall22, pre_winter23)
+combined_prescreen <- smartbind(combine1, pre_spring23)
+
+nrow(pre_fall22) + nrow(pre_winter23) + nrow(pre_spring23) # n = 1167
+
+combined_prescreen_unique <- combined_prescreen[!duplicated(combined_prescreen$full_name), ] # keeps first row (fall22)
+```
+
+Subset key variables
+```{r subset key vars}
+combined_prescreen_key <- combined_prescreen_unique %>%
+  select(full_name, term, respecting:gratification, honest:gossip)
+
+participant_list_key <- participant_list %>%
+  select(full_name, survey_id)
+```
+
+Merge with participant list
+```{r merge participant list}
+merged_prescreen <- merge(combined_prescreen_key, participant_list_key, by = "full_name")
+```
+
+Convert variable types in prescreen data
+```{r inspect merged prescreen, results = 'hide'}
+str(merged_prescreen, list.len = ncol(merged_prescreen))
+```
+
+```{r clean merged prescreen, warning = FALSE}
+merged_prescreen <- merged_prescreen %>%
+  rename("lose_out" = "lose-out", 
+         "cover_up" = "cover-up",
+         "get_even" = "get-even",
+         "behind_back" = "behind-back",
+         "private_talk" = "private-talk",
+         "take_things" = "take-things",
+         "id" = "survey_id")
+
+merged_prescreen <- merged_prescreen %>%
+  mutate(respecting = as.integer(respecting),
+         unity = as.integer(unity),
+         protecting = as.integer(protecting),
+         preventing = as.integer(preventing),
+         equality = as.integer(equality),
+         peace = as.integer(peace),
+         justice = as.integer(justice),
+         helpful = as.integer(helpful),
+         power = as.integer(power),
+         wealth = as.integer(wealth),
+         authority = as.integer(authority),
+         influential = as.integer(influential),
+         ambition = as.integer(ambition),
+         pleasures = as.integer(pleasures),
+         enjoying = as.integer(enjoying),
+         gratification = as.integer(gratification),
+         honest = as.integer(honest),
+         like = as.integer(like),
+         disturbing = as.integer(disturbing),
+         regret = as.integer(regret),
+         lose_out = as.integer(lose_out),
+         rational = as.integer(rational),
+         confident = as.integer(confident),
+         lover = as.integer(lover),
+         lies = as.integer(lies),
+         cover_up = as.integer(cover_up),
+         advantage = as.integer(advantage),
+         get_even = as.integer(get_even),
+         behind_back = as.integer(behind_back),
+         private_talk = as.integer(private_talk),
+         take_things = as.integer(take_things),
+         gossip = as.integer(gossip),
+         id = as.factor(id))
+```
+
+
+Rename values & socially desirable items in prescreen data to match names in main data:
+```{r rename prescreen vars}
+merged_prescreen <- merged_prescreen %>%
+  rename("values_1" = "respecting",
+         "values_2" = "unity",
+         "values_3" = "protecting",
+         "values_4" = "preventing",
+         "values_5" = "equality",
+         "values_6" = "peace",
+         "values_7" = "justice",
+         "values_8" = "helpful",
+         "values_9" = "power",
+         "values_10" = "wealth",
+         "values_11" = "authority",
+         "values_12" = "influential",
+         "values_13" = "ambition",
+         "values_14" = "pleasures",
+         "values_15" = "enjoying",
+         "values_16" = "gratification",
+         "socially_desirable_1" = "honest",
+         "socially_desirable_2" = "like",
+         "socially_desirable_3" = "disturbing",
+         "socially_desirable_4" = "regret",
+         "socially_desirable_5" = "lose_out",
+         "socially_desirable_6" = "rational",
+         "socially_desirable_7" = "confident",
+         "socially_desirable_8" = "lover",
+         "socially_desirable_9" = "lies",
+         "socially_desirable_10" = "cover_up",
+         "socially_desirable_11" = "advantage",
+         "socially_desirable_12" = "get_even",
+         "socially_desirable_13" = "behind_back",
+         "socially_desirable_14" = "private_talk",
+         "socially_desirable_15" = "take_things",
+         "socially_desirable_16" = "gossip")
+```
+
+
+## Combine all data
+
+- First, combine Psych Hum Subj data with Prescreen data based on `id`
+- Second, add Mktg Hum Subj data
+- Third, add gen UO Pop data
+```{r combine all data}
+combine1 <- merge(raw_psych_hum_subj, merged_prescreen, by = "id")
+combine2 <- smartbind(combine1, raw_mktg_hum_subj)
+combine3 <- smartbind(combine2, raw_gen_uo_pop)
+```
+
+## Remove duplicate cases
+
+Identify duplicate cases
+```{r id duplicate cases, results = 'hide'}
+# first, add unique row #s
+combine3 <- combine3 %>%
+  mutate(row = 1:nrow(combine3))
+
+combine3[duplicated(combine3$id),] # Only rows 1 through 858 have unique id #s
+
+# write.csv(combine3, "combined_data.csv")
+```
+
+Row IDs to remove:
+
+* 13 (participant's second time completing study)
+* 134 (participant didn't complete study first time)
+* 145 (participant didn't complete study first time)
+* 308 (participant's second time completing study)
+* 672 (participant's second time completing study)
+* 743 (participant didn't complete study first time)
+* 790 (participant didn't complete study first time)
+* 800 (participant didn't complete study first time)
+
+Remove duplicate rows after resolving:
+```{r remove duplicate cases}
+combine3 <- combine3 %>%
+  filter(!row %in% c(13, 134, 145, 308, 672, 743, 790, 800))
+```
+
+Check variables types again
+```{r inspect var types again, results = 'hide'}
+str(combine3, list.len = ncol(combine3))
+```
+
+## Remove rows of all NAs
+
+Identify completely missing rows:
+```{r id all NA rows, results = 'hide'}
+key_vars <- combine3 %>%
+  select(row, big_2_1:big_2_65, consumer_intentions_1:consumer_intentions_9, consumer_behaviors, clothing_interest_1:clothing_interest_20, ingroup_ident_1:ingroup_ident_14, values_1:values_16, socially_desirable_1:socially_desirable_16)
+
+ncol(key_vars) # number of columns - the row # column = 141
+
+all_NA_rows <- key_vars[rowSums(is.na(key_vars)) == 141,] # identify rows with 142 NAs (all missing values), row numbers are preserved
+
+all_NA_rows
+```
+
+Removing rows of fully missing data:
+```{r remove all NA rows}
+data <- combine3 %>%
+  filter(!row %in% c(859, 860, 900, 926, 927, 941, 1139, 1141, 1142, 1143, 1144, 1146, 1149, 1150, 1152)) %>% # remove rows containing all NAs
+  select(-StartDate, -EndDate, -Status, -Progress, -"Duration (in seconds)", -Finished, -RecordedDate, -ResponseId, -DistributionChannel, -UserLanguage, -big_2_DO, -consumer_intentions_DO, -consumer_behaviors_DO, -clothing_interest_DO, -ingroup_ident_DO, -full_name, -code, -socially_desirable_DO, -values_DO, -email_giftcard, -term) # removing variables not in analysis
+```
+
+
+Rename variables:
+```{r rename vars}
+data <- data %>%
+  rename("framing_condition" = "framing_condition_DO", 
+         "norm_condition" = "norm_condition_DO")
+
+levels(data$framing_condition)
+levels(data$norm_condition)
+
+data$framing_condition <- droplevels(data$framing_condition)
+data$norm_condition <- droplevels(data$norm_condition)
+
+levels(data$framing_condition)
+levels(data$norm_condition)
+
+levels(data$skepticism)
+```
+
+## Inspect final data 
+```{r inspect final df, results = 'hide'}
+str(data, list.len = ncol(data))
+
+# write.csv(data, "final_data.csv")
+```
+
+
+# Univariate Outliers
+
+## Descriptives 
+
+Detecting potential data entry outliers:
+```{r id outliers}
+# Descriptives
+data %>%
+  select_if(is.integer) %>%
+  describe()
+```
+
+Check if any values fall outside of possible scale options.
+
+## Boxplots
+```{r boxplot outliers, eval = FALSE}
+# consumer intentions
+data %>%
+  select(consumer_intentions_1:consumer_intentions_9) %>%
+  boxplot()
+
+# clothing interest
+data %>%
+  select(clothing_interest_1:clothing_interest_20) %>%
+  boxplot()
+
+# ingroup identification
+data %>%
+  select(ingroup_ident_1:ingroup_ident_14) %>%
+  boxplot()
+
+# personal values
+data %>%
+  select(values_1:values_16) %>%
+  boxplot()
+
+# socially desirable responding
+data %>%
+  select(socially_desirable_1:socially_desirable_16) %>%
+  boxplot()
+```
+
+
+## Histograms
+```{r hist outliers, eval = FALSE}
+# consumer intentions
+data %>%
+  select(consumer_intentions_1:consumer_intentions_9) %>%
+  hist.data.frame()
+
+# clothing interest
+data %>%
+  select(clothing_interest_1:clothing_interest_10) %>%
+  hist.data.frame()
+
+data %>%
+  select(clothing_interest_11:clothing_interest_20) %>%
+  hist.data.frame()
+
+# ingroup identification
+data %>%
+  select(ingroup_ident_1:ingroup_ident_7) %>%
+  hist.data.frame()
+
+data %>%
+  select(ingroup_ident_8:ingroup_ident_14) %>%
+  hist.data.frame()
+
+# personal values
+data %>%
+  select(values_1:values_8) %>%
+  hist.data.frame()
+
+data %>%
+  select(values_9:values_16) %>%
+  hist.data.frame()
+
+# socially desirable responding
+data %>%
+  select(socially_desirable_1:socially_desirable_8) %>%
+  hist.data.frame()
+
+data %>%
+  select(socially_desirable_9:socially_desirable_16) %>%
+  hist.data.frame()
+```
+
+
+## Demographics
+
+Age
+```{r age outliers}
+# Age
+data %>%
+  select(Age) %>%
+  hist()
+
+describe(data$Age) # 1999 a data entry error
+
+data %>%
+  filter(Age == 1999) # Row 1053, Year 1999 = 24 years old
+
+data$Age[data$Age == 1999] <- 24
+
+data %>%
+  filter(row == 1053) %>%
+  select(Age) # Age has been replaced with 24
+```
+
+Income
+
+- 1 = $0-9,999
+- 2 = $10,000 - 19,999
+- 3 = $20,000 - 29,999
+- 4 = $30,000 - 39,999
+- 5 = $40,000 - 49.999
+- 6 = $50,000 - 59,999
+- 7 = $60,000 - 69,999
+- 8 = $70,000 - 79,999
+- 9 = $80,000 - 89,999
+- 10 = $90,000 - 99,999
+- 11 = $100,000 or more
+```{r income outliers}
+data %>%
+  select(Income) %>%
+  boxplot()
+
+describe(data$Income)
+
+table(data$Income)
+
+data %>%
+  filter(Income == 11 | Income == 10 | Income == 9 | Income == 8 | Income == 7) %>%
+  select(Income, Age, Employment, Class_Lvl)
+```
+
+Employment
+
+- 1 = Employed, working 1-39 hrs/wk
+- 2 = Employed, working 40+ hrs/wk
+- 3 = Not employed, looking for work
+- 4 = Not employed, NOT looking for work
+- 5 = Retired
+- 6 = Not able to work
+
+Class Level
+
+- 1 = Freshman
+- 2 = Sophomore
+- 3 = Junior
+- 4 = Senior
+- 5 = Graduate student
+- 6 = Not applicable
+- 7 = Other
+
+
+Gender
+
+- 1 = woman
+- 2 = man
+- 3 = non-binary
+- 4 = I prefer not to identify
+- 5 = other (please specify)
+```{r label gender levels}
+levels(data$Gender) <- c("Woman", "Man", "Non-binary", "I prefer not to identify", "Other")
+
+table(data$Gender) 
+
+data %>%
+  filter(Gender == 5) %>%
+  select(Gender_5_TEXT)
+```
+
+
+
+# Missing Values
+
+## Examine Missingness
+
+### Consumer Intentions & Behaviors
+```{r NAs on consumer intentions & behaviors}
+data %>%
+  select(consumer_intentions_1:consumer_behaviors) %>%
+  vis_miss()
+```
+
+### Clothing Interest
+```{r NAs on clothing interest}
+data %>%
+  select(clothing_interest_1:clothing_interest_20) %>%
+  vis_miss()
+```
+
+### Ingroup Identification
+```{r NAs on ingroup ident}
+data %>%
+  select(ingroup_ident_1:ingroup_ident_14) %>%
+  vis_miss()
+```
+
+### Values
+```{r NAs on values}
+data %>%
+  select(values_1:values_16) %>%
+  vis_miss()
+```
+
+### Socially Desirable Responding
+```{r NAs on SDR}
+data %>%
+  select(socially_desirable_1:socially_desirable_16) %>%
+  vis_miss()
+```
+
+### Demographics
+```{r NAs on age, gender, income}
+data %>%
+  select(Age, Gender, Income) %>%
+  vis_miss()
+```
+
+### Personality
+```{r NAs on personality}
+data %>%
+  select(big_2_1:big_2_65) %>%
+  vis_miss()
+```
+
+### All variables
+```{r NAs on all variables}
+data %>%
+  select(consumer_intentions_1:consumer_behaviors, clothing_interest_1:clothing_interest_20, ingroup_ident_1:ingroup_ident_14, values_1:values_16, socially_desirable_1:socially_desirable_16, Age, Gender, Income, big_2_1:big_2_65) %>%
+  vis_miss(sort_miss = TRUE)
+```
+
+Less than 1% of total data is missing (0.8% missing).
+
+## MCAR Test
+
+A non-significant test suggests the data *is* missing completely at random.
+```{r MCAR test, eval = FALSE}
+test_of_mcar <- data %>%
+  select(consumer_intentions_1:consumer_behaviors, clothing_interest_1:clothing_interest_20, ingroup_ident_1:ingroup_ident_14, values_1:values_16, socially_desirable_1:socially_desirable_16, Age, Gender, Income, big_2_1:big_2_65) %>%
+  mcar_test()
+
+test_of_mcar$statistic
+test_of_mcar$df # Critical values are 8565.53 and 9086.26
+test_of_mcar$p.value
+```
+
+The test is non-significant, so we can assume the missingness is MCAR. Could also follow this up by seeing whether missingness can be predicted by any of the other variables in the model. 
+
+
+
+# Aggregate Variables 
+
+## Personality
+
+### Reverse-code
+
+```{r reverse personality items}
+data_R <- data %>%
+  mutate(across(c(big_2_11,
+                  big_2_16,
+                  big_2_26,
+                  big_2_31,
+                  big_2_36,
+                  big_2_51,
+                  big_2_12,
+                  big_2_17,
+                  big_2_22,
+                  big_2_37,
+                  big_2_42,
+                  big_2_47,
+                  big_2_3,
+                  big_2_8,
+                  big_2_23,
+                  big_2_28,
+                  big_2_48,
+                  big_2_58,
+                  big_2_4,
+                  big_2_9,
+                  big_2_24,
+                  big_2_29,
+                  big_2_44,
+                  big_2_49,
+                  big_2_5,
+                  big_2_25,
+                  big_2_30,
+                  big_2_45,
+                  big_2_50,
+                  big_2_55,
+                  big_2_63), ~6 - .)) # replace '6' with the max possible value plus 1 for any particular scale
+```
+
+### Average items
+
+```{r aggregate personality}
+data_R$extraversion <- data_R %>%
+  select(big_2_1, big_2_6, big_2_11, big_2_16, big_2_21, big_2_26, big_2_31, big_2_36, big_2_41, big_2_46, big_2_51, big_2_56) %>%
+  rowMeans(na.rm = TRUE) 
+
+
+data_R$conscientiousness <- data_R %>%
+  select(big_2_3, big_2_8, big_2_13, big_2_18, big_2_23, big_2_28, big_2_33, big_2_38, big_2_43, big_2_48, big_2_53, big_2_58) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$agreeableness <- data_R %>%
+  select(big_2_2, big_2_7, big_2_12, big_2_17, big_2_22, big_2_27, big_2_32, big_2_37, big_2_42, big_2_47, big_2_52, big_2_57) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$neuroticism <- data_R %>%
+  select(big_2_4, big_2_9, big_2_14, big_2_19, big_2_24, big_2_29, big_2_34, big_2_39, big_2_44, big_2_49, big_2_54, big_2_59) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$openness <- data_R %>%
+  select(big_2_5, big_2_10, big_2_15, big_2_20, big_2_25, big_2_30, big_2_35, big_2_40, big_2_45, big_2_50, big_2_55, big_2_60) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$honesty <- data_R %>%
+  select(big_2_61, big_2_62, big_2_63, big_2_64, big_2_65) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Scale reliability
+
+```{r alpha personality traits, echo = FALSE}
+# Extraversion items
+alpha_ext <- data_R %>%
+  select(big_2_1, big_2_6, big_2_11, big_2_16, big_2_21, big_2_26, big_2_31, big_2_36, big_2_41, big_2_46, big_2_51, big_2_56) %>%
+  alpha()
+
+# Conscientiousness items
+alpha_cons <- data_R %>%
+  select(big_2_3, big_2_8, big_2_13, big_2_18, big_2_23, big_2_28, big_2_33, big_2_38, big_2_43, big_2_48, big_2_53, big_2_58) %>%
+  alpha()
+
+# Agreeableness items
+alpha_agree <- data_R %>%
+  select(big_2_2, big_2_7, big_2_12, big_2_17, big_2_22, big_2_27, big_2_32, big_2_37, big_2_42, big_2_47, big_2_52, big_2_57) %>%
+  alpha()
+
+# Neuroticism items
+alpha_neur <- data_R %>%
+  select(big_2_4, big_2_9, big_2_14, big_2_19, big_2_24, big_2_29, big_2_34, big_2_39, big_2_44, big_2_49, big_2_54, big_2_59) %>%
+  alpha()
+
+# Openness items
+alpha_open <- data_R %>%
+  select(big_2_5, big_2_10, big_2_15, big_2_20, big_2_25, big_2_30, big_2_35, big_2_40, big_2_45, big_2_50, big_2_55, big_2_60) %>%
+  alpha()
+
+# Honesty items
+alpha_hone <- data_R %>%
+  select(big_2_61, big_2_62, big_2_63, big_2_64, big_2_65) %>%
+  alpha()
+
+alpha_ext
+alpha_cons
+alpha_agree
+alpha_neur
+alpha_open
+alpha_hone
+```
+
+
+## Clothing Interest
+
+### Reverse-code
+
+```{r reverse clothing items}
+data_R <- data_R %>%
+  mutate(across(c(clothing_interest_3,
+                  clothing_interest_5,
+                  clothing_interest_7,
+                  clothing_interest_9,
+                  clothing_interest_12,
+                  clothing_interest_14,
+                  clothing_interest_15,
+                  clothing_interest_16,
+                  clothing_interest_18,
+                  clothing_interest_20), ~6 - .)) # replace '#' with the max possible value plus 1 for any particular scale
+```
+
+
+### Average items
+```{r aggregate clothing interest}
+data_R$clothing_interest <- data_R %>%
+  select(clothing_interest_1:clothing_interest_20) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Scale reliability
+```{r alpha clothing interest, echo = FALSE}
+alpha_cloth <- data_R %>%
+  select(clothing_interest_1:clothing_interest_20) %>%
+  alpha()
+
+alpha_cloth
+```
+
+
+## In-group Identification
+
+### Reverse-code
+
+No items need to be reverse-coded.
+
+### Average items
+```{r aggegate ingroup ident}
+data_R$ingroup_identification <- data_R %>%
+  select(ingroup_ident_1:ingroup_ident_14) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Scale reliability
+```{r alpha ingroup ident, echo = FALSE}
+alpha_ingroup <- data_R %>%
+  select(ingroup_ident_1:ingroup_ident_14) %>%
+  alpha()
+
+alpha_ingroup
+```
+
+
+## Values
+
+### Reverse-code
+
+No items need to be reverse-coded.
+
+### Recoding scale options
+
+Recoding values:
+
+* -3 = 1
+* -2 = 2
+* -1 = 3
+* 0 = 4
+* +1 = 5
+* +2 = 6
+* +3 = 7
+
+```{r recode values}
+table(data_R$values_1)
+
+data_R$values_1_rec <- recode(data_R$values_1, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+
+table(data_R$values_1_rec)
+
+data_R$values_2_rec <- recode(data_R$values_2, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_3_rec <- recode(data_R$values_3, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_4_rec <- recode(data_R$values_4, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_5_rec <- recode(data_R$values_5, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_6_rec <- recode(data_R$values_6, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_7_rec <- recode(data_R$values_7, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_8_rec <- recode(data_R$values_8, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_9_rec <- recode(data_R$values_9, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_10_rec <- recode(data_R$values_10, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_11_rec <- recode(data_R$values_11, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_12_rec <- recode(data_R$values_12, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_13_rec <- recode(data_R$values_13, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_14_rec <- recode(data_R$values_14, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_15_rec <- recode(data_R$values_15, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_16_rec <- recode(data_R$values_16, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+
+table(data_R$values_16)
+table(data_R$values_16_rec)
+```
+
+
+### Average items
+```{r aggregate values}
+data_R$biospheric <- data_R %>%
+  select(values_1_rec:values_4_rec) %>%
+  rowMeans(na.rm = TRUE)
+
+data_R$altruistic <- data_R %>%
+  select(values_5_rec:values_8_rec) %>%
+  rowMeans(na.rm = TRUE)
+
+data_R$egoistic <- data_R %>%
+  select(values_9_rec:values_13_rec) %>%
+  rowMeans(na.rm = TRUE)
+
+data_R$hedonic <- data_R %>%
+  select(values_14_rec:values_16_rec) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Scale reliability
+```{r alpha values, echo = FALSE}
+alpha_biospheric <- data_R %>%
+  select(values_1_rec:values_4_rec) %>%
+  alpha()
+
+alpha_altruistic <- data_R %>%
+  select(values_5_rec:values_8_rec) %>%
+  alpha()
+
+alpha_egoistic <- data_R %>%
+  select(values_9_rec:values_13_rec) %>%
+  alpha()
+
+alpha_hedonic <- data_R %>%
+  select(values_14_rec:values_16_rec) %>%
+  alpha()
+
+alpha_biospheric
+alpha_altruistic
+alpha_egoistic
+alpha_hedonic
+```
+
+
+
+## Socially Desirable Responding
+
+### Reverse-code
+```{r reverse code socially desirable items}
+data_R <- data_R %>%
+  mutate(across(c(socially_desirable_1,
+                  socially_desirable_3,
+                  socially_desirable_5,
+                  socially_desirable_8,
+                  socially_desirable_9,
+                  socially_desirable_11,
+                  socially_desirable_12,
+                  socially_desirable_13), ~8 - .)) # replace '#' with the max possible value plus 1 for any particular scale
+```
+
+### Average items
+```{r aggregate socially desirable}
+data_R$socially_desirable <- data_R %>%
+  select(socially_desirable_1:socially_desirable_16) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Scale reliability
+```{r alpha socially desirable, echo = FALSE}
+alpha_SDR <- data_R %>%
+  select(socially_desirable_1:socially_desirable_16) %>%
+  alpha()
+
+alpha_SDR
+```
+
+
+## Consumer Intentions
+
+### Reverse-code
+
+Higher scores mean better consumer intentions (intentions to *reduce* future consumption):
+```{r reverse code consumer intentions}
+data_R <- data_R %>%
+  mutate(across(c(consumer_intentions_2,
+                  consumer_intentions_4,
+                  consumer_intentions_7,
+                  consumer_intentions_9), ~8 - .)) # replace '#' with the max possible value plus 1 for any particular scale
+```
+
+### Average items
+
+```{r aggregate consumer intentions}
+data_R$consumer_intentions <- data_R %>%
+  select(consumer_intentions_1:consumer_intentions_9) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Scale reliability
+
+```{r alpha consumer intentions, echo = FALSE}
+alpha_cons_int <- data_R %>%
+  select(consumer_intentions_1:consumer_intentions_9) %>%
+  alpha()
+
+alpha_cons_int
+```
+
+### Reorder levels
+
+Reorder the levels of norm condition:
+```{r reorder norm condition levels}
+data_R %>%
+  group_by(norm_condition) %>%
+  summarize(M = mean(consumer_intentions, na.rm = TRUE))
+
+data_R$norm_condition <- ordered(data_R$norm_condition, levels = c("control_norm", "descriptive_norm", "convention_norm", "social_norm", "moral_norm"))
+```
+
+
+
+
+
+# Regression Analysis for Consumer Intentions
+
+## Center Covariates
+
+- Socially desirable responding
+- Clothing interest
+- Values
+- Ingroup identification
+- Age
+- Gender
+- Income (not sure how to handle inconsistencies in this variable was responded to)
+
+```{r center covariates, echo = FALSE}
+data_R$socially_desirable_center <- data_R$socially_desirable - mean(data_R$socially_desirable, na.rm = TRUE)
+
+data_R$clothing_interest_center <- data_R$clothing_interest - mean(data_R$clothing_interest, na.rm = TRUE)
+
+data_R$Age_center <- data_R$Age - mean(data_R$Age, na.rm = TRUE)
+
+data_R$ingroup_identification_center <- data_R$ingroup_identification - mean(data_R$ingroup_identification, na.rm = TRUE)
+
+data_R$biospheric_center <- data_R$biospheric - mean(data_R$biospheric, na.rm = TRUE)
+
+data_R$altruistic_center <- data_R$altruistic - mean(data_R$altruistic, na.rm = TRUE)
+
+data_R$egoistic_center <- data_R$egoistic - mean(data_R$egoistic, na.rm = TRUE)
+
+data_R$hedonic_center <- data_R$hedonic - mean(data_R$hedonic, na.rm = TRUE)
+
+data_R$extraversion_center <- data_R$extraversion - mean(data_R$extraversion, na.rm = TRUE)
+  
+data_R$conscientiousness_center <- data_R$conscientiousness - mean(data_R$conscientiousness, na.rm = TRUE)
+
+data_R$agreeableness_center <- data_R$agreeableness - mean(data_R$agreeableness, na.rm = TRUE)
+
+data_R$neuroticism_center <- data_R$neuroticism - mean(data_R$neuroticism, na.rm = TRUE)
+
+data_R$openness_center <- data_R$openness - mean(data_R$openness, na.rm = TRUE)
+
+data_R$honesty_center <- data_R$honesty - mean(data_R$honesty, na.rm = TRUE)
+
+```
+
+
+```{r reduce levels of gender, echo = FALSE}
+data_R$Gender[data_R$Gender == "Non-binary"] <- NA
+data_R$Gender[data_R$Gender == "I prefer not to identify"] <- NA
+data_R$Gender[data_R$Gender == "Other"] <- NA
+
+data_R$Gender <- droplevels(data_R$Gender)
+```
+
+
+## Contrast Coding
+
+```{r contrast coding 1}
+# Gender
+contrasts(data_R$Gender) <- c(-1/2, 1/2)
+contrasts(data_R$Gender)
+
+# Framing
+FrameCode1 <- c(-1/2, 0, 1/2) # control vs self-enhancing
+FrameCode2 <- c(-1/3, 2/3, -1/3) # arbitrary code
+
+contrasts(data_R$framing_condition) <- cbind(FrameCode1, FrameCode2)
+contrasts(data_R$framing_condition)
+
+# Norm
+contrasts(data_R$norm_condition) <- contr.helmert(5)
+contrasts(data_R$norm_condition) # control vs DN
+
+# Skepticism
+contrasts(data_R$skepticism) <- c(-1/2, 1/2)
+```
+
+
+
+# Exploratory Analysis with Skepticism
+
+## Running Model 
+
+```{r full model with skept}
+exp_model_1a <- lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_identification_center + socially_desirable_center + clothing_interest_center + Gender + Age_center + framing_condition*norm_condition*skepticism, data = data_R)
+```
+
+## Regression Output
+
+Full Summary
+```{r full summary with skept, include = FALSE}
+exp_summary <- summary(exp_model_1a)
+summary(exp_model_1a)
+```
+
+* 159 observations deleted due to missingness
+* n = 974
+* number of parameters = 95
+* F(94, 879) = 3.50, p < .001, adj_R_sq = .195
+
+Succinct Summary
+```{r succinct summary with skept}
+exp_summary$coefficients %>%
+  knitr::kable(digits = 3)
+```
+
+Effect Sizes
+```{r}
+eta_squared(exp_model_1a, ci = 0.95, alternative = "two.sided", partial = FALSE)
+```
+
+
+## ANOVA Output
+```{r anova table consumer intentions with skept}
+anova(exp_model_1a) %>%
+  knitr::kable(digits = 3)
+```
+
+
+## Unpacking interaction
+
+Skepticism by framing condition
+```{r}
+# Control framing
+control_fr_skept <- data_R %>%
+  select(framing_condition, skepticism) %>%
+  filter(framing_condition == "control_framing") 
+
+table(control_fr_skept$skepticism) 
+
+# Pro-environmental framing
+pe_fr_skept <- data_R %>%
+  select(framing_condition, skepticism) %>%
+  filter(framing_condition == "pro_env_framing")
+
+table(pe_fr_skept$skepticism) 
+
+
+# Self-enhancing framing
+se_fr_skept <- data_R %>%
+  select(framing_condition, skepticism) %>%
+  filter(framing_condition == "self_enh_framing")
+
+table(se_fr_skept$skepticism) 
+
+
+emmeans(exp_model_1a, pairwise ~ skepticism | framing_condition, adjust = "none")
+```
+
+Skepticism by norm condition
+```{r}
+# Control norm
+ctrl_norm_skept <- data_R %>%
+  select(norm_condition, skepticism) %>%
+  filter(norm_condition == "control_norm")
+
+table(ctrl_norm_skept$skepticism) 
+
+
+# Descriptive norm
+dn_skept <- data_R %>%
+  select(norm_condition, skepticism) %>%
+  filter(norm_condition == "descriptive_norm")
+
+table(dn_skept$skepticism) 
+
+
+
+# Convention norm
+cn_skept <- data_R %>%
+  select(norm_condition, skepticism) %>%
+  filter(norm_condition == "convention_norm")
+
+table(cn_skept$skepticism) 
+
+
+
+# Social norm
+sn_skept <- data_R %>%
+  select(norm_condition, skepticism) %>%
+  filter(norm_condition == "social_norm")
+
+table(sn_skept$skepticism) 
+
+
+
+# Moral norm
+mn_skept <- data_R %>%
+  select(norm_condition, skepticism) %>%
+  filter(norm_condition == "moral_norm")
+
+table(mn_skept$skepticism) 
+
+
+
+emmeans(exp_model_1a, pairwise ~ skepticism | norm_condition, adjust = "none")
+```
+
