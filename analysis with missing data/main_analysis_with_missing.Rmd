@@ -12,7 +12,6 @@ editor_options:
 
 To do:
 
-  * figure out multiple imputation dfs
   * figure out logistic regression interaction & emmeans analyses
   * post-hoc power analyses..?
      - modelPower

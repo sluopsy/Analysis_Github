@@ -834,7 +834,7 @@ Imputation model
 set.seed(114950518)
 ```
 
-
+- check out mice.impute.smcfcs 
 
 ```{r echo = FALSE}
 imps <- smcfcs(data_R_alt, 
@@ -986,6 +986,8 @@ mod_mice <- with(mids_obj, lm(consumer_intentions ~ framing_condition*norm_condi
 
 ```{r}
 pool_obj <- pool(mod_mice)
+
+pool_obj
 ```
 
 
@@ -996,7 +998,7 @@ Using `mice` package:
 # summary(pool(mod_mice))
 
 pool_summ <- summary(pool(mod_mice)) %>%
-  knitr::kable(digits = 3)
+  knitr::kable(digits = 5)
 
 pool_summ
 ```
@@ -1015,12 +1017,15 @@ anova_pool %>%
 
 
 
+
 ## Analysis in each imputed data set 
 
 ### Imputed Data 1
 ```{r}
-data_imp1 <- complete_data %>%
-  filter(.imp == 1)
+#data_imp1a <- complete_data %>%
+ # filter(.imp == 1)
+
+data_imp1 <- impobject$imputations[[1]]
 
 mod_mice_imp1 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp1)
 ```
@@ -1028,7 +1033,11 @@ mod_mice_imp1 <-lm(consumer_intentions ~ framing_condition*norm_condition*biosph
 #### Regression summary
 ```{r}
 summary_imp1 <- summary(mod_mice_imp1)
+summary_imp1
+```
 
+Succinct summary
+```{r}
 summary_imp1$coefficients %>%
   knitr::kable(digits = 3)
 ```
@@ -1042,8 +1051,7 @@ anova(mod_mice_imp1) %>%
 
 ### Imputed Data 2
 ```{r}
-data_imp2 <- complete_data %>%
-  filter(.imp == 2)
+data_imp2 <- impobject$imputations[[2]]
 
 mod_mice_imp2 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp2)
 ```
@@ -1051,7 +1059,11 @@ mod_mice_imp2 <-lm(consumer_intentions ~ framing_condition*norm_condition*biosph
 #### Regression summary
 ```{r}
 summary_imp2 <- summary(mod_mice_imp2)
+summary_imp2
+```
 
+Succinct summary
+```{r}
 summary_imp2$coefficients %>%
   knitr::kable(digits = 3)
 ```
@@ -1067,8 +1079,7 @@ anova(mod_mice_imp2) %>%
 
 ### Imputed Data 3
 ```{r}
-data_imp3 <- complete_data %>%
-  filter(.imp == 3)
+data_imp3 <- impobject$imputations[[3]]
 
 mod_mice_imp3 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp3)
 ```
@@ -1076,7 +1087,11 @@ mod_mice_imp3 <-lm(consumer_intentions ~ framing_condition*norm_condition*biosph
 #### Regression summary
 ```{r}
 summary_imp3 <- summary(mod_mice_imp3)
+summary_imp3
+```
 
+Succinct summary
+```{r}
 summary_imp3$coefficients %>%
   knitr::kable(digits = 3)
 ```
@@ -1091,8 +1106,7 @@ anova(mod_mice_imp3) %>%
 
 ### Imputed Data 4
 ```{r}
-data_imp4 <- complete_data %>%
-  filter(.imp == 4)
+data_imp4 <- impobject$imputations[[4]]
 
 mod_mice_imp4 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp4)
 ```
@@ -1100,7 +1114,11 @@ mod_mice_imp4 <-lm(consumer_intentions ~ framing_condition*norm_condition*biosph
 #### Regression summary
 ```{r}
 summary_imp4 <- summary(mod_mice_imp4)
+summary_imp4
+```
 
+Succinct summary
+```{r}
 summary_imp4$coefficients %>%
   knitr::kable(digits = 3)
 ```
@@ -1108,15 +1126,14 @@ summary_imp4$coefficients %>%
 #### ANOVA summary
 ```{r}
 anova(mod_mice_imp4) %>%
-  knitr::kable(digits = 3) # df_residual = 1039 = 1133-94
+  knitr::kable(digits = 3) 
 ```
 
 
 
 ### Imputed Data 5
 ```{r}
-data_imp5 <- complete_data %>%
-  filter(.imp == 5)
+data_imp5 <- impobject$imputations[[5]]
 
 mod_mice_imp5 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp5)
 ```
@@ -1124,7 +1141,11 @@ mod_mice_imp5 <-lm(consumer_intentions ~ framing_condition*norm_condition*biosph
 #### Regression summary
 ```{r}
 summary_imp5 <- summary(mod_mice_imp5)
+summary_imp5
+```
 
+Succinct summary
+```{r}
 summary_imp5$coefficients %>%
   knitr::kable(digits = 3)
 ```
@@ -1132,7 +1153,7 @@ summary_imp5$coefficients %>%
 #### ANOVA summary
 ```{r}
 anova(mod_mice_imp5) %>%
-  knitr::kable(digits = 3) # df_residual = 1039 = 1133-94
+  knitr::kable(digits = 3) 
 ```
 
 
@@ -1689,13 +1710,15 @@ log_mice <- with(mids_obj, glm(consumer_behaviors ~ framing_condition*norm_condi
 log_pool_obj <- pool(log_mice)
 ```
 
+```{r}
+log_mice
+```
+
 
 ## Model Summary
 
 Full summary
 ```{r include = FALSE}
-log_mice
-
 log_summ_pool <- summary(pool(log_mice))
 log_summ_pool
 ```
@@ -1721,9 +1744,12 @@ ORs_pool %>%
 
 see if this works for producing anova table... 
 ```{r}
-anova(pool(log_mice)) %>%
-  knitr::kable(digits = 3)
+#anova(pool(log_mice)) %>%
+ # knitr::kable(digits = 3)
 ```
+
+
+
 
 
 
@@ -1746,7 +1772,7 @@ log_minus_frameXnorm
 * residual deviance from full log model = 1335
 
 ```{r}
-D3(log_mice, log_minus_frameXnorm)
+D1(log_mice, log_minus_frameXnorm)
 ```
 
 * Inclusion of framing X norm interaction does not account for significantly more variance in the model
@@ -1766,7 +1792,7 @@ log_minus_frameXbio
 * residual deviance = 1335 (same as full log model)
 
 ```{r}
-D3(log_mice, log_minus_frameXbio)
+D1(log_mice, log_minus_frameXbio)
 ```
 
 
@@ -1786,7 +1812,7 @@ log_minus_frameXalt
 * residual deviance = 
 
 ```{r}
-D3(log_mice, log_minus_frameXalt)
+D1(log_mice, log_minus_frameXalt)
 ```
 
 
@@ -1805,7 +1831,7 @@ log_minus_frameXego
 * residual deviance = 
 
 ```{r}
-D3(log_mice, log_minus_frameXego)
+D1(log_mice, log_minus_frameXego)
 ```
 
 
@@ -1824,7 +1850,7 @@ log_minus_frameXhed
 * residual deviance = 
 
 ```{r}
-D3(log_mice, log_minus_frameXhed)
+D1(log_mice, log_minus_frameXhed)
 ```
 
 
@@ -1843,7 +1869,7 @@ log_minus_frameXingroup
 * residual deviance = 
 
 ```{r}
-D3(log_mice, log_minus_frameXingroup)
+D1(log_mice, log_minus_frameXingroup)
 ```
 
 
@@ -1864,7 +1890,7 @@ log_minus_normXbio
 * residual deviance = 
 
 ```{r}
-D3(log_mice, log_minus_normXbio)
+D1(log_mice, log_minus_normXbio)
 ```
 
 
@@ -1884,7 +1910,7 @@ log_minus_normXalt
 * residual deviance = 
 
 ```{r}
-D3(log_mice, log_minus_normXalt)
+D1(log_mice, log_minus_normXalt)
 ```
 
 
@@ -1903,7 +1929,7 @@ log_minus_normXego
 * residual deviance = 
 
 ```{r}
-D3(log_mice, log_minus_normXego)
+D1(log_mice, log_minus_normXego)
 ```
 
 
@@ -1922,7 +1948,7 @@ log_minus_normXhed
 * residual deviance = 
 
 ```{r}
-D3(log_mice, log_minus_normXhed)
+D1(log_mice, log_minus_normXhed)
 ```
 
 
@@ -1941,7 +1967,7 @@ log_minus_normXingroup
 * residual deviance = 
 
 ```{r}
-D3(log_mice, log_minus_normXingroup)
+D1(log_mice, log_minus_normXingroup)
 ```
 
 
@@ -1963,7 +1989,7 @@ log_minus_frameXnormXbio
 * residual deviance = 1340
 
 ```{r}
-D3(log_mice, log_minus_frameXnormXbio)
+D1(log_mice, log_minus_frameXnormXbio)
 ```
 
 
@@ -1983,7 +2009,7 @@ log_minus_frameXnormXalt
 * residual deviance = 1344
 
 ```{r}
-D3(log_mice, log_minus_frameXnormXalt)
+D1(log_mice, log_minus_frameXnormXalt)
 ```
 
 
@@ -2002,7 +2028,7 @@ log_minus_frameXnormXego
 * residual deviance = 1339
 
 ```{r}
-D3(log_mice, log_minus_frameXnormXego)
+D1(log_mice, log_minus_frameXnormXego)
 ```
 
 
@@ -2021,7 +2047,7 @@ log_minus_frameXnormXhed
 * residual deviance = 1339
 
 ```{r}
-D3(log_mice, log_minus_frameXnormXhed)
+D1(log_mice, log_minus_frameXnormXhed)
 ```
 
 
@@ -2040,5 +2066,5 @@ log_minus_frameXnormXingroup
 * residual deviance = 1339
 
 ```{r}
-D3(log_mice, log_minus_frameXnormXingroup)
+D1(log_mice, log_minus_frameXnormXingroup)
 ```
