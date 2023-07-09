@@ -1,12 +1,15 @@
 ---
 title: "Analysis using Multiple Imputation (scmfcs)"
-output: 
+output:
+  word_document:
+    toc: yes
+    toc_depth: '3'
   html_document:
-    toc: true
+    toc: yes
     toc_depth: 3
-    toc_float: true
+    toc_float: yes
 date: "2023-03-29"
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
 
@@ -41,6 +44,7 @@ library(mitools) # for pooling MI results
 library(marginaleffects) # for plotting marginal means 
 library(installr)
 library(epiDisplay) # for frequency tables
+library(papaja) # for APA printing
 
 options(max.print = 100000) # max rows to print in output
 options(scipen = 1000) # turn off sci notation
@@ -87,6 +91,8 @@ raw_psych_hum_subj <- raw_psych_hum_subj %>%
          skepticism = as.factor(skepticism),
          id = as.factor(id),
          source = strrep("psych_hsp", times = 1))
+
+levels(raw_psych_hum_subj$framing_condition_DO)
 
 raw_mktg_hum_subj <- raw_mktg_hum_subj %>%
   mutate(Age = as.integer(Age),
@@ -349,6 +355,13 @@ data$norm_condition <- droplevels(data$norm_condition)
 levels(data$framing_condition)
 levels(data$norm_condition)
 ```
+
+
+Re-order levels of norm condition
+```{r}
+data$norm_condition <- factor(data$norm_condition, levels = c("control_norm", "descriptive_norm", "convention_norm", "social_norm", "moral_norm"))
+```
+
 
 ## Inspect final data 
 ```{r inspect final df, results = 'hide'}
@@ -655,35 +668,15 @@ data_R %>%
 ```
 
 
-### Reorder levels
-
-Reorder the levels of norm condition:
-```{r reorder norm condition levels}
-data_R %>%
-  group_by(norm_condition) %>%
-  summarize(M = mean(consumer_intentions, na.rm = TRUE))
-
-data_R$norm_condition <- factor(data_R$norm_condition, levels = c("control_norm", "descriptive_norm", "convention_norm", "social_norm", "moral_norm"))
-```
 
 
-
-# Regression Analysis (DV = Consumer Intentions)
-
-```{r include = FALSE}
-# library(haven)
-# write_sav(data_R, "combined_clean_data.sav") 
-```
-
-
-## Contrast Coding 
+# Contrast Coding 
 
 Subset variables
 ```{r echo = FALSE}
 data_R_alt <- data_R %>%
   dplyr::select(hedonic, egoistic, altruistic, biospheric, ingroup_identification, Age, clothing_interest, self_deceptive_sdr, impress_manag_sdr, consumer_intentions, consumer_behaviors, Gender, framing_condition, norm_condition)
 ```
-
 
 Contrast Coding using ifelse() approach:
 ```{r alt coding}
@@ -728,11 +721,10 @@ levels(data_R_alt$Gender)
 ```
 
 
-## Multiple Imputation 
+# Multiple Imputation 
 
-### Full Model
+## Examine Missingness
 
-Examine missingness:
 ```{r}
 data_R_alt %>%
   vis_miss()
@@ -747,7 +739,7 @@ Variables with NO missing data:
 * norm_condition
 
 
-Adding interaction terms
+## Adding interaction terms
 ```{r include = FALSE}
 data_R_alt <- data_R_alt %>%
   mutate(framing1Xbiospheric = (FramingCode1)*(biospheric),
@@ -828,7 +820,7 @@ data_R_alt <- data_R_alt %>%
 
 
 
-Imputation model
+## Imputation model
 
 ```{r}
 set.seed(114950518)
@@ -849,7 +841,7 @@ Storing imputed data sets
 impobject <- imputationList(imps$impDatasets)
 ```
 
-### Centering continuous predictors
+## Centering continuous predictors
 ```{r}
 # Biospheric values
 impobject$imputations[[1]]$biospheric_center <- impobject$imputations[[1]]$biospheric - mean(impobject$imputations[[1]]$biospheric)
@@ -964,7 +956,6 @@ impobject$imputations[[5]]$impress_manag_center <- impobject$imputations[[5]]$im
 
 
 
-
 Convert `scmfcs` object to a `mids` object (to make the object compatible with `mice`, and thus, `emmeans`):
 ```{r}
 mids_obj <- datlist2mids(impobject)
@@ -977,7 +968,7 @@ complete_data <- complete(mids_obj, "long")
 
 
 
-
+# Regression Analysis (DV = Consumer Intentions)
 
 ## Running Model
 ```{r}
@@ -995,12 +986,17 @@ pool_obj
 
 Using `mice` package:
 ```{r}
-# summary(pool(mod_mice))
+pool_summ <- summary(pool(mod_mice))
 
-pool_summ <- summary(pool(mod_mice)) %>%
+pool_summ %>%
   knitr::kable(digits = 5)
+```
 
-pool_summ
+APA style table for regression summary
+```{r}
+apa_table(pool_summ,
+          caption = "Table 1 Pooled Regression Results",
+          note = "DV = Consumer Intentions")
 ```
 
 
@@ -1009,12 +1005,11 @@ pool_summ
 anova_pool <- mi.anova(mi.res = mids_obj, formula = "consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center", type = 3) 
 ```
 
-
+ANOVA results
 ```{r}
 anova_pool %>%
   knitr::kable(digits = 3)
 ```
-
 
 
 
@@ -1042,6 +1037,16 @@ summary_imp1$coefficients %>%
   knitr::kable(digits = 3)
 ```
 
+APA style table for regression summary
+```{r}
+apa_summ_imp1 <- apa_print(summary_imp1)
+
+apa_summ_imp1$table %>%
+apa_table(caption = "Table 2 Regression Results Using Imputed Data 1",
+          note = "DV = Consumer Intentions")
+```
+
+
 #### ANOVA summary
 ```{r}
 anova(mod_mice_imp1) %>%
@@ -1066,6 +1071,15 @@ Succinct summary
 ```{r}
 summary_imp2$coefficients %>%
   knitr::kable(digits = 3)
+```
+
+APA style table for regression summary
+```{r}
+apa_summ_imp2 <- apa_print(summary_imp2)
+
+apa_summ_imp2$table %>%
+apa_table(caption = "Table 3 Regression Results Using Imputed Data 2",
+          note = "DV = Consumer Intentions")
 ```
 
 #### ANOVA summary
@@ -1096,6 +1110,16 @@ summary_imp3$coefficients %>%
   knitr::kable(digits = 3)
 ```
 
+APA style table for regression summary
+```{r}
+apa_summ_imp3 <- apa_print(summary_imp3)
+
+apa_summ_imp3$table %>%
+apa_table(caption = "Table 4 Regression Results Using Imputed Data 3",
+          note = "DV = Consumer Intentions")
+```
+
+
 #### ANOVA summary
 ```{r}
 anova(mod_mice_imp3) %>%
@@ -1122,6 +1146,17 @@ Succinct summary
 summary_imp4$coefficients %>%
   knitr::kable(digits = 3)
 ```
+
+
+APA style table for regression summary
+```{r}
+apa_summ_imp4 <- apa_print(summary_imp4)
+
+apa_summ_imp4$table %>%
+apa_table(caption = "Table 5 Regression Results Using Imputed Data 4",
+          note = "DV = Consumer Intentions")
+```
+
 
 #### ANOVA summary
 ```{r}
@@ -1150,6 +1185,15 @@ summary_imp5$coefficients %>%
   knitr::kable(digits = 3)
 ```
 
+APA style table for regression summary
+```{r}
+apa_summ_imp5 <- apa_print(summary_imp5)
+
+apa_summ_imp5$table %>%
+apa_table(caption = "Table 6 Regression Results Using Imputed Data 5",
+          note = "DV = Consumer Intentions")
+```
+
 #### ANOVA summary
 ```{r}
 anova(mod_mice_imp5) %>%
@@ -1163,6 +1207,44 @@ anova(mod_mice_imp5) %>%
 
 ## Simple Effects
 
+Averaging scores across imputations
+```{r}
+complete_data_subset <- complete_data %>%
+  dplyr::select(.imp, .id, consumer_intentions, consumer_behaviors, Gender, framing_condition, norm_condition, biospheric_center, altruistic_center, egoistic_center, hedonic_center, ingroup_center, Age_center, clothing_center, self_dec_center, impress_manag_center)
+
+average_df <- complete_data_subset %>% 
+  group_by(.id) %>%
+  transmute(.imp = .imp, 
+            consumer_behaviors = consumer_behaviors, 
+            Gender = Gender,
+            framing_condition = framing_condition,
+            norm_condition = norm_condition,
+            biospheric_center = mean(biospheric_center),
+         altruistic_center = mean(altruistic_center),
+         egoistic_center = mean(egoistic_center),
+         hedonic_center = mean(hedonic_center),
+         ingroup_center = mean(ingroup_center),
+         Age_center = mean(Age_center),
+         clothing_center = mean(clothing_center),
+         self_dec_center = mean(self_dec_center),
+         impress_manag_center = mean(impress_manag_center),
+         consumer_intentions = mean(consumer_intentions))
+
+
+average_df <- average_df %>%
+  filter(.imp == 1)
+```
+
+
+Labels to use with facet_wrap
+```{r}
+norm_labs <- c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")
+names(norm_labs) <- c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm")
+
+frame_labs <- c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")
+names(frame_labs) <- c("control_framing","pro_env_framing","self_enh_framing")
+```
+
 ### Framing Condition
 
 >>H1: Consumer intentions/behaviors will be lower in the self-enhancing framing than in the pro-environmental or control framing conditions.
@@ -1173,8 +1255,17 @@ frame_means <- emmeans(mod_mice, pairwise ~ framing_condition, adjust = "none")
 
 frame_means
 confint(frame_means)
+```
 
-emmip(mod_mice, ~ framing_condition, CIs = TRUE, xlab = "Framing Condition", ylab = "Consumer Intentions")
+
+```{r}
+# without data overlaid
+emmip(mod_mice, ~ framing_condition, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.5), xlab = "Framing Condition", ylab = "Consumer Intentions") + scale_x_discrete(breaks=c("control_framing","pro_env_framing","self_enh_framing"),
+        labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa()
+                                                                                                                      
+# with data overlaid (scores averaged across imputations)
+emmip(mod_mice, ~ framing_condition, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.5), xlab = "Framing Condition", ylab = "Consumer Intentions") + geom_point(data = average_df, aes(x = framing_condition, y = consumer_intentions), alpha = 0.1, color = "blue") + scale_x_discrete(breaks=c("control_framing","pro_env_framing","self_enh_framing"),
+        labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa()
 ```
 
 
@@ -1203,8 +1294,17 @@ Comparing each level of norm condition:
 norm_means <- emmeans(mod_mice, pairwise ~ norm_condition, adjust = "none")
 
 norm_means
+```
 
-emmip(mod_mice, ~ norm_condition, CIs = TRUE, xlab = "Norm Condition", ylab = "Consumer Intentions")
+
+```{r}
+# without data overlaid
+emmip(mod_mice, ~ norm_condition, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.5), xlab = "Norm Condition", ylab = "Consumer Intentions") + scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"),
+        labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa()
+
+# with data overlaid
+emmip(mod_mice, ~ norm_condition, CIs = TRUE, xlab = "Norm Condition", ylab = "Consumer Intentions") + geom_point(data = average_df, aes(x = norm_condition, y = consumer_intentions), alpha = 0.1, color = "blue") + scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"),
+        labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa()
 ```
 
 
@@ -1232,8 +1332,18 @@ Effect of norm condition at each level of framing condition:
 cell_means <- emmeans(mod_mice, pairwise ~ norm_condition | framing_condition, adjust = "none")
 
 cell_means
+```
 
-emmip(mod_mice, framing_condition ~ norm_condition, CIs = FALSE, xlab = "Norm Condition", ylab = "Consumer Intentions")
+
+
+```{r}
+# without data overlaid
+emmip(mod_mice, framing_condition ~ norm_condition, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.5), xlab = "Norm Condition", ylab = "Consumer Intentions") + scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"),
+        labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa()
+
+# with data overlaid
+emmip(mod_mice, ~ norm_condition | framing_condition, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.5), xlab = "Norm Condition", ylab = "Consumer Intentions") + geom_point(data = average_df, aes(x = norm_condition, y = consumer_intentions, color = norm_condition), alpha = 0.2, show.legend = FALSE) + scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"),
+        labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
 ```
 
 * Differences between the control norm condition & other norm conditions were not significant within any of the framing conditions.
@@ -1259,8 +1369,11 @@ control_norm_means <- emmeans(mod_mice, pairwise ~ norm_condition*framing_condit
 control_norm_means
 
 eff_size(control_norm_means, sigma = sigma_pool, edf = df_resid_pool)
+```
 
 
+
+```{r}
 # Descriptive norm
 chosen_values <- list(norm_condition = c("descriptive_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
 
@@ -1268,8 +1381,11 @@ descr_norm_means <- emmeans(mod_mice, pairwise ~ norm_condition*framing_conditio
 descr_norm_means
 
 eff_size(descr_norm_means, sigma = sigma_pool, edf = df_resid_pool)
+```
 
 
+
+```{r}
 # Convention norm
 chosen_values <- list(norm_condition = c("convention_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
 
@@ -1277,8 +1393,11 @@ conv_norm_means <- emmeans(mod_mice, pairwise ~ norm_condition*framing_condition
 conv_norm_means
 
 eff_size(conv_norm_means, sigma = sigma_pool, edf = df_resid_pool)
+```
 
 
+
+```{r}
 # Social norm
 chosen_values <- list(norm_condition = c("social_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
 
@@ -1286,8 +1405,11 @@ soc_norm_means <- emmeans(mod_mice, pairwise ~ norm_condition*framing_condition,
 soc_norm_means
 
 eff_size(soc_norm_means, sigma = sigma_pool, edf = df_resid_pool)
+```
 
 
+
+```{r}
 # Moral norm
 chosen_values <- list(norm_condition = c("moral_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
 
@@ -1299,8 +1421,6 @@ eff_size(moral_norm_means, sigma = sigma_pool, edf = df_resid_pool)
 
 
 
-
-
 ### Values Interactions
 
 >>H4: There will be a three-way interaction between values (biospheric, egoistic, altruistic, hedonic), framing condition, & norm condition such that when a pro-environmental or control framing is used, values will moderate the effect of each norm condition, but not when a self-enhancing framing is used.
@@ -1308,16 +1428,29 @@ eff_size(moral_norm_means, sigma = sigma_pool, edf = df_resid_pool)
 
 ### Biospheric Values
 
-
 First, relationship between biospheric values & consumer intentions for each norm condition:
 ```{r}
-emtrends(mod_mice, ~norm_condition, var = "biospheric_center", adjust = "none")
+bio_norm_means <- emtrends(mod_mice, ~norm_condition, var = "biospheric_center", adjust = "none")
+
+bio_norm_means
+
+bio_norm_contr <- contrast(bio_norm_means, "pairwise")
+bio_norm_contr
+```
 
 
+```{r}
 # On a single graph
-at_list <- list(biospheric_center = seq(-5, 1.3, by = 1))
+describe(average_df$biospheric_center)
+at_list <- list(biospheric_center = seq(-4.9, 1.2, by = 1)) # add .05 to the bounds set by min and max
 
-emmip(mod_mice, norm_condition ~ biospheric_center, at = at_list, CIs = TRUE, xlab = "Biospheric Values (centered)", ylab = "Consumer Intentions")
+# without data overlaid
+emmip(mod_mice, norm_condition ~ biospheric_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Biospheric Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"),
+        labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa()
+
+
+# with data overlaid
+emmip(mod_mice, ~ biospheric_center | norm_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Biospheric Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + geom_point(data = average_df, aes(x = biospheric_center, y = consumer_intentions, color = norm_condition), alpha = 0.5) + facet_wrap(~norm_condition, labeller = labeller(norm_condition = norm_labs)) + theme_apa()
 ```
 
 * Biospheric values was a significant, positive predictor of consumer intentions in all norm conditions except for the moral norm conditions in which it was a non-significant, positive predictor.
@@ -1327,7 +1460,8 @@ emmip(mod_mice, norm_condition ~ biospheric_center, at = at_list, CIs = TRUE, xl
 Is the slope of the relationship between biospheric values & consumer intentions stronger in any one of the norm conditions compared to the others?
 
 ```{r}
-emtrends(mod_mice, pairwise~norm_condition, var = "biospheric_center", adjust = "none")
+bio_norm_slopes <- emtrends(mod_mice, pairwise~norm_condition, var = "biospheric_center", adjust = "none")
+bio_norm_slopes
 ```
 
 
@@ -1338,11 +1472,17 @@ The relationship between biospheric values and consumer intentions was significa
 Second, relationship between biospheric values & consumer intentions for each framing condition:
 ```{r}
 emtrends(mod_mice, ~framing_condition, var = "biospheric_center", adjust = "none")
+```
 
-# On a single graph
-at_list <- list(biospheric_center = seq(-5, 1.3, by = 1))
 
-emmip(mod_mice, framing_condition ~ biospheric_center, at = at_list, CIs = TRUE, xlab = "Biospheric Values (centered)", ylab = "Consumer Intentions")
+
+```{r}
+# without data overlaid
+emmip(mod_mice, framing_condition ~ biospheric_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Biospheric Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"),
+        labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa()
+
+# with data overlaid
+emmip(mod_mice, ~ biospheric_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Biospheric Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + geom_point(data = average_df, aes(x = biospheric_center, y = consumer_intentions, color = framing_condition), alpha = 0.5) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
 ```
 
 * Biospheric values were significantly, positively related to consumer intentions in all framing conditions.
@@ -1351,20 +1491,29 @@ emmip(mod_mice, framing_condition ~ biospheric_center, at = at_list, CIs = TRUE,
 Is the slope of the relationship between biospheric values & consumer intentions stronger in any one of the framing conditions compared to the others?
 
 ```{r}
-emtrends(mod_mice, pairwise~framing_condition, var = "biospheric_center", adjust = "none")
+bio_frame_trends <- emtrends(mod_mice, pairwise~framing_condition, var = "biospheric_center", adjust = "none")
+bio_frame_trends
 ```
+
 
 No, the relationship between biospheric values and consumer intentions was similarly strong across all framing conditions.
 
 
 Third, interaction between biospheric values, framing, & norm condition:
 ```{r}
-emtrends(mod_mice, ~norm_condition | framing_condition, var = "biospheric_center", adjust = "none")
+bio_frame_norm_trends <- emtrends(mod_mice, pairwise~norm_condition | framing_condition, var = "biospheric_center", adjust = "none")
+bio_frame_norm_trends
+```
 
-# Separate graph for each framing condition
-at_list <- list(biospheric_center = seq(-5, 1.3, by = 1))
 
-emmip(mod_mice, norm_condition ~ biospheric_center | framing_condition, at = at_list, CIs = TRUE, xlab = "Biospheric Values (centered)", ylab = "Consumer Intentions")
+
+
+```{r}
+# without data overlaid
+emmip(mod_mice, norm_condition ~ biospheric_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Biospheric Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
+
+
+# with data overlaid - doesn't work
 ```
 
 * In the control framing condition, biospheric values were significantly, positively related to consumer intentions in the **control norm**, **descriptive norm**, and **convention** conditions but non-significantly, negatively related in the **social norm** and **moral norm** conditions.
@@ -1381,12 +1530,27 @@ emmip(mod_mice, norm_condition ~ biospheric_center | framing_condition, at = at_
 First, relationship between altruistic values & consumer intentions for each norm condition:
 ```{r}
 emtrends(mod_mice, ~norm_condition, var = "altruistic_center", adjust = "none")
+```
+
+Table
+```{r}
+#
+```
 
 
+Graph
+```{r}
 # On a single graph
-at_list <- list(altruistic_center = seq(-5.4, 1, by = 1))
+describe(average_df$altruistic_center)
+at_list <- list(altruistic_center = seq(-5.26, 0.84, by = 1))
 
-emmip(mod_mice, norm_condition ~ altruistic_center, at = at_list, CIs = TRUE, xlab = "Altruistic Values (centered)", ylab = "Consumer Intentions")
+# without data overlaid
+emmip(mod_mice, norm_condition ~ altruistic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Altruistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa()
+
+
+# with data overlaid
+emmip(mod_mice, ~ altruistic_center | norm_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Altruistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + geom_point(data = average_df, aes(x = altruistic_center, y = consumer_intentions, color = norm_condition), alpha = 0.5) + facet_wrap(~norm_condition, labeller = labeller(norm_condition = norm_labs)) + theme_apa()
+
 ```
 
 * Altruistic values was a non-significant predictor of consumer intentions in the **control norm**, **descriptive norm**, **convention**, and **social norm** conditions.
@@ -1411,10 +1575,11 @@ Second, relationship between altruistic values & consumer intentions for each fr
 ```{r}
 emtrends(mod_mice, ~framing_condition, var = "altruistic_center", adjust = "none")
 
-# On a single graph
-at_list <- list(altruistic_center = seq(-5.4, 1, by = 1))
+# without data overlaid
+emmip(mod_mice, framing_condition ~ altruistic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Altruistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa()
 
-emmip(mod_mice, framing_condition ~ altruistic_center, at = at_list, CIs = TRUE, xlab = "Altruistic Values (centered)", ylab = "Consumer Intentions")
+# with data overlaid
+emmip(mod_mice, ~ altruistic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Altruistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + geom_point(data = average_df, aes(x = altruistic_center, y = consumer_intentions, color = framing_condition), alpha = 0.5) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
 ```
 
 * Altruistic values are positively, but non-significantly, related to consumer intentions in each framing condition.
@@ -1435,10 +1600,8 @@ Third, interaction between altruistic values, framing, & norm condition:
 ```{r}
 emtrends(mod_mice, ~norm_condition | framing_condition, var = "altruistic_center", adjust = "none")
 
-# Separate graph for each framing condition
-at_list <- list(altruistic_center = seq(-5.4, 1, by = 1))
-
-emmip(mod_mice, norm_condition ~ altruistic_center | framing_condition, at = at_list, CIs = TRUE, xlab = "Altruistic Values (centered)", ylab = "Consumer Intentions")
+# without data overlaid
+emmip(mod_mice, norm_condition ~ altruistic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Altruistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
 ```
 
 * In the control framing condition, altruistic values were not significantly related to consumer intentions in any of the norm conditions.
@@ -1459,9 +1622,15 @@ First, relationship between egoistic values & consumer intentions for each norm 
 emtrends(mod_mice, ~norm_condition, var = "egoistic_center", adjust = "none")
 
 # On a single graph
-at_list <- list(egoistic_center = seq(-3.6, 2.2, by = 1))
+describe(average_df$egoistic_center)
+at_list <- list(egoistic_center = seq(-3.45, 2.05, by = 1))
 
-emmip(mod_mice, norm_condition ~ egoistic_center, at = at_list, CIs = TRUE, xlab = "Egoistic Values (centered)", ylab = "Consumer Intentions")
+# without data overlaid
+emmip(mod_mice, norm_condition ~ egoistic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Egoistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa()
+
+
+# with data overlaid
+emmip(mod_mice, ~ egoistic_center | norm_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Egoistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + geom_point(data = average_df, aes(x = egoistic_center, y = consumer_intentions, color = norm_condition), alpha = 0.5) + facet_wrap(~norm_condition, labeller = labeller(norm_condition = norm_labs)) + theme_apa()
 ```
 
 * Egoistic values were a significant, negative predictor of consumer intentions within each norm condition
@@ -1481,10 +1650,11 @@ Second, relationship between egoistic values & consumer intentions for each fram
 ```{r}
 emtrends(mod_mice, ~framing_condition, var = "egoistic_center", adjust = "none")
 
-# On a single graph
-at_list <- list(egoistic_center = seq(-3.6, 2.2, by = 1))
+# without data overlaid
+emmip(mod_mice, framing_condition ~ egoistic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Egoistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa()
 
-emmip(mod_mice, framing_condition ~ egoistic_center, at = at_list, CIs = TRUE, xlab = "Egoistic Values (centered)", ylab = "Consumer Intentions")
+# with data overlaid
+emmip(mod_mice, ~ egoistic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Egoistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + geom_point(data = average_df, aes(x = egoistic_center, y = consumer_intentions, color = framing_condition), alpha = 0.5) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
 ```
 
 * Egoistic values were a significant, negative predictor of consumer intentions within each framing condition
@@ -1505,10 +1675,8 @@ Third, interaction between egoistic values, framing, & norm condition:
 ```{r}
 emtrends(mod_mice, ~norm_condition | framing_condition, var = "egoistic_center", adjust = "none")
 
-# Separate graph for each framing condition
-at_list <- list(egoistic_center = seq(-3.6, 2.2, by = 1))
-
-emmip(mod_mice, norm_condition ~ egoistic_center | framing_condition, at = at_list, CIs = TRUE, xlab = "Egoistic Values (centered)", ylab = "Consumer Intentions")
+# without data overlaid
+emmip(mod_mice, norm_condition ~ egoistic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Egoistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
 ```
 
 * In the control framing condition, egoistic values were *not* significantly related to consumer intentions in the **control norm**, **descriptive norm**, or **moral norm** conditions (but were signifcantly, negatively related to consumer intentions in the **convention** and **social norm** conditions).
@@ -1523,18 +1691,23 @@ emmip(mod_mice, norm_condition ~ egoistic_center | framing_condition, at = at_li
 
 
 
-### Hedoninc Values
+### Hedonic Values
 
 
 First, relationship between hedonic values & consumer intentions for each norm condition:
 ```{r}
 emtrends(mod_mice, ~norm_condition, var = "hedonic_center", adjust = "none")
 
-
 # On a single graph
-at_list <- list(hedonic_center = seq(-5.2, 1.2, by = 1))
+describe(average_df$hedonic_center)
+at_list <- list(hedonic_center = seq(-5.1, 1, by = 1))
 
-emmip(mod_mice, norm_condition ~ hedonic_center, at = at_list, CIs = TRUE, xlab = "Hedonic Values (centered)", ylab = "Consumer Intentions")
+# without data overlaid
+emmip(mod_mice, norm_condition ~ hedonic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Hedonic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa()
+
+
+# with data overlaid
+emmip(mod_mice, ~ hedonic_center | norm_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Hedonic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + geom_point(data = average_df, aes(x = hedonic_center, y = consumer_intentions, color = norm_condition), alpha = 0.5) + facet_wrap(~norm_condition, labeller = labeller(norm_condition = norm_labs)) + theme_apa()
 ```
 
 * Hedonic values were not significantly related to consumer intentions in any norm condition except for the **moral norm** condition in which they were significantly, negatively related to consumer intentions.
@@ -1554,10 +1727,11 @@ Second, relationship between hedonic values & consumer intentions for each frami
 ```{r}
 emtrends(mod_mice, ~framing_condition, var = "hedonic_center", adjust = "none")
 
-# On a single graph
-at_list <- list(hedonic_center = seq(-5.2, 1.2, by = 1))
+# without data overlaid
+emmip(mod_mice, framing_condition ~ hedonic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Hedonic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa()
 
-emmip(mod_mice, framing_condition ~ hedonic_center, at = at_list, CIs = TRUE, xlab = "Hedonic Values (centered)", ylab = "Consumer Intentions")
+# with data overlaid
+emmip(mod_mice, ~ hedonic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Hedonic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + geom_point(data = average_df, aes(x = hedonic_center, y = consumer_intentions, color = framing_condition), alpha = 0.5) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
 ```
 
 * Hedonic values were non-significantly, negatively related to consumer intentions in all framing conditions.
@@ -1577,10 +1751,8 @@ Third, interaction between hedonic values, framing, & norm condition:
 ```{r}
 emtrends(mod_mice, ~norm_condition | framing_condition, var = "hedonic_center", adjust = "none")
 
-# Separate graph for each framing condition
-at_list <- list(hedonic_center = seq(-5.2, 1.2, by = 1))
-
-emmip(mod_mice, norm_condition ~ hedonic_center | framing_condition, at = at_list, CIs = TRUE, xlab = "Hedonic Values (centered)", ylab = "Consumer Intentions")
+# without data overlaid
+emmip(mod_mice, norm_condition ~ hedonic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Hedonic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
 ```
 
 * In the control framing condition, hedonic values were not significantly related to consumer intentions in any norm condition.
@@ -1601,9 +1773,15 @@ First, relationship between ingroup identification & consumer intentions for eac
 emtrends(mod_mice, ~norm_condition, var = "ingroup_center", adjust = "none")
 
 # On a single graph
-at_list <- list(ingroup_center = seq(-3.8, 2.6, by = 1))
+describe(average_df$ingroup_center)
+at_list <- list(ingroup_center = seq(-3.69, 2.41, by = 1))
 
-emmip(mod_mice, norm_condition ~ ingroup_center, at = at_list, CIs = TRUE, xlab = "Ingroup Identification (centered)", ylab = "Consumer Intentions")
+# without data overlaid
+emmip(mod_mice, norm_condition ~ ingroup_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Ingroup Identification (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa()
+
+
+# with data overlaid
+emmip(mod_mice, ~ ingroup_center | norm_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Ingroup Identification (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + geom_point(data = average_df, aes(x = ingroup_center, y = consumer_intentions, color = norm_condition), alpha = 0.5) + facet_wrap(~norm_condition, labeller = labeller(norm_condition = norm_labs)) + theme_apa()
 ```
 
 * Ingroup identification was not significantly related to consumer intentions in any of the norm conditions.
@@ -1623,16 +1801,17 @@ Second, relationship between ingroup idenitification & consumer intentions for e
 ```{r}
 emtrends(mod_mice, ~framing_condition, var = "ingroup_center", adjust = "none")
 
-# On a single graph
-at_list <- list(ingroup_center = seq(-3.8, 2.6, by = 1))
+# without data overlaid
+emmip(mod_mice, framing_condition ~ ingroup_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Ingroup Identification (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa()
 
-emmip(mod_mice, framing_condition ~ ingroup_center, at = at_list, CIs = TRUE, xlab = "Ingroup Identification (centered)", ylab = "Consumer Intentions")
+# with data overlaid
+emmip(mod_mice, ~ ingroup_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Ingroup Identification (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + geom_point(data = average_df, aes(x = ingroup_center, y = consumer_intentions, color = framing_condition), alpha = 0.5) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
 ```
 
 * Ingroup identification was non-significantly related to consumer intentions in all framing conditions.
 
 
-Is the slope of the relationship between ingroup idenitification & consumer intentions stronger in any one of the framing conditions compared to the others?
+Is the slope of the relationship between ingroup identification & consumer intentions stronger in any one of the framing conditions compared to the others?
 
 ```{r}
 emtrends(mod_mice, pairwise~framing_condition, var = "ingroup_center", adjust = "none")
@@ -1648,10 +1827,8 @@ Third, interaction between ingroup identification, framing, & norm condition:
 ```{r}
 emtrends(mod_mice, ~norm_condition | framing_condition, var = "ingroup_center", adjust = "none")
 
-# Separate graph for each framing condition
-at_list <- list(ingroup_center = seq(-3.8, 2.6, by = 1))
-
-emmip(mod_mice, norm_condition ~ ingroup_center | framing_condition, at = at_list, CIs = TRUE, xlab = "Ingroup Identification (centered)", ylab = "Consumer Intentions")
+# without data overlaid
+emmip(mod_mice, norm_condition ~ ingroup_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Ingroup Identification (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
 ```
 
 * In the control framing condition, ingroup identification was non-significantly related to consumer intentions in all norm conditions.
@@ -1679,392 +1856,22 @@ There are no significant differences between the control norm/control framing co
 ### Gender Interactions (exploratory)
 
 
-Three-way Gender Interactions:
+Gender X Norm
 ```{r}
 emmeans(mod_mice, ~ norm_condition*Gender*framing_condition, adjust = "none")
 
-emmip(mod_mice, Gender ~ norm_condition | framing_condition, CIs = FALSE, xlab = "Norm Condition", ylab = "Consumer Intentions")
-
-emmip(mod_mice, Gender ~ framing_condition | norm_condition, CIs = FALSE, xlab = "Norm Condition", ylab = "Consumer Intentions")
-
+emmip(mod_mice, norm_condition ~ Gender, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa()
 ```
 
-
-# Logistic Analysis (DV = Consumer Behaviors)
-
-Consumer Behaviors
-
-* 0 = New Clothing
-* 1 = Secondhand Clothing
-
-
-## Running Model
-```{r echo = FALSE}
-log_mice <- with(mids_obj, glm(consumer_behaviors ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, family = "binomial"))
-```
-
-* df_residual = 1039
-* residual deviance: 1335
-
+Gender X Framing
 ```{r}
-log_pool_obj <- pool(log_mice)
+emmip(mod_mice, framing_condition ~ Gender, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa()
 ```
 
+Gender X Norm X Framing
 ```{r}
-log_mice
-```
-
-
-## Model Summary
-
-Full summary
-```{r include = FALSE}
-log_summ_pool <- summary(pool(log_mice))
-log_summ_pool
-```
-
-
-## Pooled Regression Results
-
-```{r}
-summary(pool(log_mice)) %>%
-  knitr::kable(digits = 3)
-```
-
-### Odds Ratios
-
-Converting log odds estimates to odds ratios:
-```{r}
-ORs_pool <- cbind(log_summ_pool$term, exp(log_summ_pool$estimate))
-
-ORs_pool %>%
-  knitr::kable(digits = 2)
-```
-
-
-see if this works for producing anova table... 
-```{r}
-#anova(pool(log_mice)) %>%
- # knitr::kable(digits = 3)
+emmip(mod_mice, norm_condition ~ Gender | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa()
 ```
 
 
 
-
-
-
-
-## Model Comparisons for Testing Interactions
-
-### Testing framingXnorm interaction
-```{r}
-log_minus_frameXnorm <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_frameXnorm
-```
-
-
-* df_residual = 1046 (1038 is df_resid from full log model + 8 contrast codes for interaction)
-* residual deviance = 1342
-* residual deviance from full log model = 1335
-
-```{r}
-D1(log_mice, log_minus_frameXnorm)
-```
-
-* Inclusion of framing X norm interaction does not account for significantly more variance in the model
-
-
-### Testing framingXbiospheric interaction
-```{r}
-log_minus_frameXbio <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_frameXbio
-```
-
-* df_residual = 1038 (1038 is df_resid from full log model)
-* residual deviance = 1335 (same as full log model)
-
-```{r}
-D1(log_mice, log_minus_frameXbio)
-```
-
-
-
-
-### Testing framingXaltruistic interaction
-```{r}
-log_minus_frameXalt <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_frameXalt
-```
-
-* df_residual = 
-* residual deviance = 
-
-```{r}
-D1(log_mice, log_minus_frameXalt)
-```
-
-
-
-### Testing framingXegoistic interaction
-```{r}
-log_minus_frameXego <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_frameXego
-```
-
-* df_residual = 
-* residual deviance = 
-
-```{r}
-D1(log_mice, log_minus_frameXego)
-```
-
-
-
-### Testing framingXhedonic interaction
-```{r}
-log_minus_frameXhed <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_frameXhed
-```
-
-* df_residual = 
-* residual deviance = 
-
-```{r}
-D1(log_mice, log_minus_frameXhed)
-```
-
-
-
-### Testing frameXingroup interaction
-```{r}
-log_minus_frameXingroup <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_frameXingroup
-```
-
-* df_residual = 
-* residual deviance = 
-
-```{r}
-D1(log_mice, log_minus_frameXingroup)
-```
-
-
-
-
-
-### Testing normXbiospheric interaction
-```{r}
-log_minus_normXbio <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_normXbio
-```
-
-* df_residual = 
-* residual deviance = 
-
-```{r}
-D1(log_mice, log_minus_normXbio)
-```
-
-
-
-
-### Testing normXaltruistic interaction
-```{r}
-log_minus_normXalt <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_normXalt
-```
-
-* df_residual = 
-* residual deviance = 
-
-```{r}
-D1(log_mice, log_minus_normXalt)
-```
-
-
-
-### Testing normXegoistic interaction
-```{r}
-log_minus_normXego <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_normXego
-```
-
-* df_residual = 
-* residual deviance = 
-
-```{r}
-D1(log_mice, log_minus_normXego)
-```
-
-
-
-### Testing normXhedonic interaction
-```{r}
-log_minus_normXhed <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_normXhed
-```
-
-* df_residual = 
-* residual deviance = 
-
-```{r}
-D1(log_mice, log_minus_normXhed)
-```
-
-
-
-### Testing normXingroup interaction
-```{r}
-log_minus_normXingroup <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_normXingroup
-```
-
-* df_residual = 
-* residual deviance = 
-
-```{r}
-D1(log_mice, log_minus_normXingroup)
-```
-
-
-
-
-
-
-### Testing frameXnormXbiospheric interaction
-```{r}
-log_minus_frameXnormXbio <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_frameXnormXbio
-```
-
-* df_residual = 1046 (1038 is df_resid from full log model + 8 contrast codes for interaction)
-* residual deviance = 1340
-
-```{r}
-D1(log_mice, log_minus_frameXnormXbio)
-```
-
-
-
-
-### Testing frameXnormXaltruistic interaction
-```{r}
-log_minus_frameXnormXalt <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_frameXnormXalt
-```
-
-* df_residual = 1046
-* residual deviance = 1344
-
-```{r}
-D1(log_mice, log_minus_frameXnormXalt)
-```
-
-
-
-### Testing frameXnormXegoistic interaction
-```{r}
-log_minus_frameXnormXego <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_frameXnormXego
-```
-
-* df_residual = 1046
-* residual deviance = 1339
-
-```{r}
-D1(log_mice, log_minus_frameXnormXego)
-```
-
-
-
-### Testing frameXnormXhedonic interaction
-```{r}
-log_minus_frameXnormXhed <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_frameXnormXhed
-```
-
-* df_residual = 1046
-* residual deviance = 1339
-
-```{r}
-D1(log_mice, log_minus_frameXnormXhed)
-```
-
-
-
-### Testing frameXnormXingroup interaction
-```{r}
-log_minus_frameXnormXingroup <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center, family = "binomial"))
-```
-
-Full model results
-```{r include = FALSE}
-log_minus_frameXnormXingroup
-```
-
-* df_residual = 1046
-* residual deviance = 1339
-
-```{r}
-D1(log_mice, log_minus_frameXnormXingroup)
-```

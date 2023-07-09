@@ -12,13 +12,14 @@ editor_options:
 
 To do:
 
-  * figure out logistic regression interaction & emmeans analyses
-  * post-hoc power analyses..?
+  * logistic regression 
+    - marginal means
+    - simple effects analyses
+    - descriptive statistics
+  * apa style output (tables)
+  * post-hoc power analyses
      - modelPower
   * add effect sizes to simple effects analyses
-  * check for skewness on values variables 
-     - they are skewed... now what?
-     - showing data on interaction plots to show where majority of data is congregating
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)

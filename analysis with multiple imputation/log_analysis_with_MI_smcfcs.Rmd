@@ -1,5 +1,5 @@
 ---
-title: "exploratory_personality_with_MI"
+title: "log_analysis_with_MI_smcfcs"
 output: 
   html_document:
     toc: true
@@ -41,6 +41,7 @@ library(mitools) # for pooling MI results
 library(marginaleffects) # for plotting marginal means 
 library(installr)
 library(epiDisplay) # for frequency tables
+library(papaja)
 
 options(max.print = 100000) # max rows to print in output
 options(scipen = 1000) # turn off sci notation
@@ -87,6 +88,8 @@ raw_psych_hum_subj <- raw_psych_hum_subj %>%
          skepticism = as.factor(skepticism),
          id = as.factor(id),
          source = strrep("psych_hsp", times = 1))
+
+levels(raw_psych_hum_subj$framing_condition_DO)
 
 raw_mktg_hum_subj <- raw_mktg_hum_subj %>%
   mutate(Age = as.integer(Age),
@@ -350,6 +353,13 @@ levels(data$framing_condition)
 levels(data$norm_condition)
 ```
 
+
+Re-order levels of norm condition
+```{r}
+data$norm_condition <- factor(data$norm_condition, levels = c("control_norm", "descriptive_norm", "convention_norm", "social_norm", "moral_norm"))
+```
+
+
 ## Inspect final data 
 ```{r inspect final df, results = 'hide'}
 str(data, list.len = ncol(data))
@@ -467,6 +477,14 @@ data_R$clothing_interest <- data_R %>%
 ```
 
 
+### Visually Inspect
+```{r}
+data_R %>%
+  dplyr::select(clothing_interest) %>%
+  hist()
+```
+
+
 
 ## In-group Identification
 
@@ -481,6 +499,13 @@ data_R$ingroup_identification <- data_R %>%
   rowMeans(na.rm = TRUE)
 ```
 
+### Visually Inspect
+
+```{r}
+data_R %>%
+  dplyr::select(ingroup_identification) %>%
+  hist()
+```
 
 ## Values
 
@@ -548,6 +573,15 @@ data_R$hedonic <- data_R %>%
 ```
 
 
+### Visually inspect
+```{r}
+values_df <- data_R %>%
+  dplyr::select(biospheric, altruistic, egoistic, hedonic)
+
+values_df %>%
+  hist()
+```
+
 ### Frequency tables
 ```{r}
 # Biospheric values
@@ -592,6 +626,13 @@ data_R$impress_manag_sdr <- data_R %>%
   rowMeans(na.rm = TRUE)
 ```
 
+### Visually inspect
+
+```{r warning = FALSE}
+data_R %>%
+  dplyr::select(self_deceptive_sdr, impress_manag_sdr) %>%
+  hist()
+```
 
 
 ## Consumer Intentions
@@ -624,33 +665,12 @@ data_R %>%
 ```
 
 
-### Reorder levels
-
-Reorder the levels of norm condition:
-```{r reorder norm condition levels}
-data_R %>%
-  group_by(norm_condition) %>%
-  summarize(M = mean(consumer_intentions, na.rm = TRUE))
-
-data_R$norm_condition <- factor(data_R$norm_condition, levels = c("control_norm", "descriptive_norm", "convention_norm", "social_norm", "moral_norm"))
-```
-
-
-
-# Regression Analysis (DV = Consumer Intentions)
-
-```{r include = FALSE}
-# library(haven)
-# write_sav(data_R, "combined_clean_data.sav") 
-```
-
-
-## Contrast Coding 
+# Contrast Coding 
 
 Subset variables
 ```{r echo = FALSE}
 data_R_alt <- data_R %>%
-  dplyr::select(hedonic, egoistic, altruistic, biospheric, ingroup_identification, Age, clothing_interest, self_deceptive_sdr, impress_manag_sdr, consumer_intentions, consumer_behaviors, Gender, framing_condition, norm_condition, extraversion, conscientiousness, agreeableness, openness, neuroticism, honesty)
+  dplyr::select(hedonic, egoistic, altruistic, biospheric, ingroup_identification, Age, clothing_interest, self_deceptive_sdr, impress_manag_sdr, consumer_intentions, consumer_behaviors, Gender, framing_condition, norm_condition)
 ```
 
 
@@ -696,17 +716,22 @@ contrasts(data_R_alt$Gender) <- c(1, 0)
 levels(data_R_alt$Gender)
 ```
 
+Coding consumer_behaviors 0/1 and numeric because required by smcfcs imputation function:
+```{r}
+data_R_alt$consumer_behaviors <- as.numeric(data_R_alt$consumer_behaviors)
 
-## Multiple Imputation 
+data_R_alt$consumer_behaviors <- ifelse(data_R_alt$consumer_behaviors == 1, 0, 1)
+```
 
-### Full Model
+
+# Multiple Imputation 
+
+## Examine Missingness
 
 Examine missingness:
 ```{r}
 data_R_alt %>%
   vis_miss()
-
-sapply(data_R_alt, function(x) sum(is.na(x)))
 ```
 
 Variables with NO missing data:
@@ -717,8 +742,8 @@ Variables with NO missing data:
 * framing_condition
 * norm_condition
 
+## Adding interaction terms
 
-Adding interaction terms
 ```{r include = FALSE}
 data_R_alt <- data_R_alt %>%
   mutate(framing1Xbiospheric = (FramingCode1)*(biospheric),
@@ -794,114 +819,22 @@ data_R_alt <- data_R_alt %>%
          framing2Xnorm1Xingroup = (FramingCode2)*(NormCode1)*(ingroup_identification),
          framing2Xnorm2Xingroup = (FramingCode2)*(NormCode2)*(ingroup_identification),
          framing2Xnorm3Xingroup = (FramingCode2)*(NormCode3)*(ingroup_identification),
-         framing2Xnorm4Xingroup = (FramingCode2)*(NormCode4)*(ingroup_identification),
-         
-         framing1Xextraversion = (FramingCode1)*(extraversion),
-         framing2Xextraversion = (FramingCode2)*(extraversion),
-         norm1Xextraversion = (NormCode1)*(extraversion),
-         norm2Xextraversion = (NormCode2)*(extraversion),
-         norm3Xextraversion = (NormCode3)*(extraversion),
-         norm4Xextraversion = (NormCode4)*(extraversion),
-         framing1Xnorm1Xextraversion = (FramingCode1)*(NormCode1)*(extraversion),
-         framing1Xnorm2Xextraversion = (FramingCode1)*(NormCode2)*(extraversion),
-         framing1Xnorm3Xextraversion = (FramingCode1)*(NormCode3)*(extraversion),
-         framing1Xnorm4Xextraversion = (FramingCode1)*(NormCode4)*(extraversion),
-         framing2Xnorm1Xextraversion = (FramingCode2)*(NormCode1)*(extraversion),
-         framing2Xnorm2Xextraversion = (FramingCode2)*(NormCode2)*(extraversion),
-         framing2Xnorm3Xextraversion = (FramingCode2)*(NormCode3)*(extraversion),
-         framing2Xnorm4Xextraversion = (FramingCode2)*(NormCode4)*(extraversion),
-         
-         framing1Xconscientiousness = (FramingCode1)*(conscientiousness),
-         framing2Xconscientiousness = (FramingCode2)*(conscientiousness),
-         norm1Xconscientiousness = (NormCode1)*(conscientiousness),
-         norm2Xconscientiousness = (NormCode2)*(conscientiousness),
-         norm3Xconscientiousness = (NormCode3)*(conscientiousness),
-         norm4Xconscientiousness = (NormCode4)*(conscientiousness),
-         framing1Xnorm1Xconscientiousness = (FramingCode1)*(NormCode1)*(conscientiousness),
-         framing1Xnorm2Xconscientiousness = (FramingCode1)*(NormCode2)*(conscientiousness),
-         framing1Xnorm3Xconscientiousness = (FramingCode1)*(NormCode3)*(conscientiousness),
-         framing1Xnorm4Xconscientiousness = (FramingCode1)*(NormCode4)*(conscientiousness),
-         framing2Xnorm1Xconscientiousness = (FramingCode2)*(NormCode1)*(conscientiousness),
-         framing2Xnorm2Xconscientiousness = (FramingCode2)*(NormCode2)*(conscientiousness),
-         framing2Xnorm3Xconscientiousness = (FramingCode2)*(NormCode3)*(conscientiousness),
-         framing2Xnorm4Xconscientiousness = (FramingCode2)*(NormCode4)*(conscientiousness),
-         
-         framing1Xagreeableness = (FramingCode1)*(agreeableness),
-         framing2Xagreeableness = (FramingCode2)*(agreeableness),
-         norm1Xagreeableness = (NormCode1)*(agreeableness),
-         norm2Xagreeableness = (NormCode2)*(agreeableness),
-         norm3Xagreeableness = (NormCode3)*(agreeableness),
-         norm4Xagreeableness = (NormCode4)*(agreeableness),
-         framing1Xnorm1Xagreeableness = (FramingCode1)*(NormCode1)*(agreeableness),
-         framing1Xnorm2Xagreeableness = (FramingCode1)*(NormCode2)*(agreeableness),
-         framing1Xnorm3Xagreeableness = (FramingCode1)*(NormCode3)*(agreeableness),
-         framing1Xnorm4Xagreeableness = (FramingCode1)*(NormCode4)*(agreeableness),
-         framing2Xnorm1Xagreeableness = (FramingCode2)*(NormCode1)*(agreeableness),
-         framing2Xnorm2Xagreeableness = (FramingCode2)*(NormCode2)*(agreeableness),
-         framing2Xnorm3Xagreeableness = (FramingCode2)*(NormCode3)*(agreeableness),
-         framing2Xnorm4Xagreeableness = (FramingCode2)*(NormCode4)*(agreeableness),
-         
-         framing1Xopenness = (FramingCode1)*(openness),
-         framing2Xopenness = (FramingCode2)*(openness),
-         norm1Xopenness = (NormCode1)*(openness),
-         norm2Xopenness = (NormCode2)*(openness),
-         norm3Xopenness = (NormCode3)*(openness),
-         norm4Xopenness = (NormCode4)*(openness),
-         framing1Xnorm1Xopenness = (FramingCode1)*(NormCode1)*(openness),
-         framing1Xnorm2Xopenness = (FramingCode1)*(NormCode2)*(openness),
-         framing1Xnorm3Xopenness = (FramingCode1)*(NormCode3)*(openness),
-         framing1Xnorm4Xopenness = (FramingCode1)*(NormCode4)*(openness),
-         framing2Xnorm1Xopenness = (FramingCode2)*(NormCode1)*(openness),
-         framing2Xnorm2Xopenness = (FramingCode2)*(NormCode2)*(openness),
-         framing2Xnorm3Xopenness = (FramingCode2)*(NormCode3)*(openness),
-         framing2Xnorm4Xopenness = (FramingCode2)*(NormCode4)*(openness),
-         
-         framing1Xneuroticism = (FramingCode1)*(neuroticism),
-         framing2Xneuroticism = (FramingCode2)*(neuroticism),
-         norm1Xneuroticism = (NormCode1)*(neuroticism),
-         norm2Xneuroticism = (NormCode2)*(neuroticism),
-         norm3Xneuroticism = (NormCode3)*(neuroticism),
-         norm4Xneuroticism = (NormCode4)*(neuroticism),
-         framing1Xnorm1Xneuroticism = (FramingCode1)*(NormCode1)*(neuroticism),
-         framing1Xnorm2Xneuroticism = (FramingCode1)*(NormCode2)*(neuroticism),
-         framing1Xnorm3Xneuroticism = (FramingCode1)*(NormCode3)*(neuroticism),
-         framing1Xnorm4Xneuroticism = (FramingCode1)*(NormCode4)*(neuroticism),
-         framing2Xnorm1Xneuroticism = (FramingCode2)*(NormCode1)*(neuroticism),
-         framing2Xnorm2Xneuroticism = (FramingCode2)*(NormCode2)*(neuroticism),
-         framing2Xnorm3Xneuroticism = (FramingCode2)*(NormCode3)*(neuroticism),
-         framing2Xnorm4Xneuroticism = (FramingCode2)*(NormCode4)*(neuroticism),
-         
-         framing1Xhonesty = (FramingCode1)*(honesty),
-         framing2Xhonesty = (FramingCode2)*(honesty),
-         norm1Xhonesty = (NormCode1)*(honesty),
-         norm2Xhonesty = (NormCode2)*(honesty),
-         norm3Xhonesty = (NormCode3)*(honesty),
-         norm4Xhonesty = (NormCode4)*(honesty),
-         framing1Xnorm1Xhonesty = (FramingCode1)*(NormCode1)*(honesty),
-         framing1Xnorm2Xhonesty = (FramingCode1)*(NormCode2)*(honesty),
-         framing1Xnorm3Xhonesty = (FramingCode1)*(NormCode3)*(honesty),
-         framing1Xnorm4Xhonesty = (FramingCode1)*(NormCode4)*(honesty),
-         framing2Xnorm1Xhonesty = (FramingCode2)*(NormCode1)*(honesty),
-         framing2Xnorm2Xhonesty = (FramingCode2)*(NormCode2)*(honesty),
-         framing2Xnorm3Xhonesty = (FramingCode2)*(NormCode3)*(honesty),
-         framing2Xnorm4Xhonesty = (FramingCode2)*(NormCode4)*(honesty))
+         framing2Xnorm4Xingroup = (FramingCode2)*(NormCode4)*(ingroup_identification))
 ```
 
 
 
-Imputation model
+## Imputation Model
 
 ```{r}
 set.seed(114950518)
 ```
 
-- check out mice.impute.smcfcs 
-
 ```{r echo = FALSE}
 imps <- smcfcs(data_R_alt, 
-               smtype = "lm", 
-               smformula = "consumer_intentions ~ framing_condition + norm_condition + framing_condition*norm_condition + biospheric + altruistic + egoistic + hedonic + ingroup_identification + clothing_interest + self_deceptive_sdr + impress_manag_sdr + Age + Gender + extraversion + conscientiousness + agreeableness + openness + neuroticism + honesty + framing1Xbiospheric + framing2Xbiospheric + norm1Xbiospheric + norm2Xbiospheric + norm3Xbiospheric + norm4Xbiospheric + framing1Xnorm1Xbiospheric + framing1Xnorm2Xbiospheric + framing1Xnorm3Xbiospheric + framing1Xnorm4Xbiospheric + framing2Xnorm1Xbiospheric + framing2Xnorm2Xbiospheric + framing2Xnorm3Xbiospheric + framing2Xnorm4Xbiospheric + framing1Xaltruistic + framing2Xaltruistic + norm1Xaltruistic + norm2Xaltruistic + norm3Xaltruistic + norm4Xaltruistic + framing1Xnorm1Xaltruistic + framing1Xnorm2Xaltruistic + framing1Xnorm3Xaltruistic + framing1Xnorm4Xaltruistic + framing2Xnorm1Xaltruistic + framing2Xnorm2Xaltruistic + framing2Xnorm3Xaltruistic + framing2Xnorm4Xaltruistic + framing1Xegoistic + framing2Xegoistic + norm1Xegoistic + norm2Xegoistic + norm3Xegoistic + norm4Xegoistic + framing1Xnorm1Xegoistic + framing1Xnorm2Xegoistic + framing1Xnorm3Xegoistic + framing1Xnorm4Xegoistic + framing2Xnorm1Xegoistic + framing2Xnorm2Xegoistic + framing2Xnorm3Xegoistic + framing2Xnorm4Xegoistic + framing1Xhedonic + framing2Xhedonic + norm1Xhedonic + norm2Xhedonic + norm3Xhedonic + norm4Xhedonic + framing1Xnorm1Xhedonic + framing1Xnorm2Xhedonic + framing1Xnorm3Xhedonic + framing1Xnorm4Xhedonic + framing2Xnorm1Xhedonic + framing2Xnorm2Xhedonic + framing2Xnorm3Xhedonic + framing2Xnorm4Xhedonic + framing1Xingroup + framing2Xingroup + norm1Xingroup + norm2Xingroup + norm3Xingroup + norm4Xingroup + framing1Xnorm1Xingroup + framing1Xnorm2Xingroup + framing1Xnorm3Xingroup + framing1Xnorm4Xingroup + framing2Xnorm1Xingroup + framing2Xnorm2Xingroup + framing2Xnorm3Xingroup + framing2Xnorm4Xingroup + framing1Xextraversion + framing2Xextraversion + norm1Xextraversion + norm2Xextraversion + norm3Xextraversion + norm4Xextraversion + framing1Xnorm1Xextraversion + framing1Xnorm2Xextraversion + framing1Xnorm3Xextraversion + framing1Xnorm4Xextraversion + framing2Xnorm1Xextraversion + framing2Xnorm2Xextraversion + framing2Xnorm3Xextraversion + framing2Xnorm4Xextraversion + framing1Xconscientiousness + framing2Xconscientiousness + norm1Xconscientiousness + norm2Xconscientiousness + norm3Xconscientiousness + norm4Xconscientiousness + framing1Xnorm1Xconscientiousness + framing1Xnorm2Xconscientiousness + framing1Xnorm3Xconscientiousness + framing1Xnorm4Xconscientiousness + framing2Xnorm1Xconscientiousness + framing2Xnorm2Xconscientiousness + framing2Xnorm3Xconscientiousness + framing2Xnorm4Xconscientiousness + framing1Xagreeableness + framing2Xagreeableness + norm1Xagreeableness + norm2Xagreeableness + norm3Xagreeableness + norm4Xagreeableness + framing1Xnorm1Xagreeableness + framing1Xnorm2Xagreeableness + framing1Xnorm3Xagreeableness + framing1Xnorm4Xagreeableness + framing2Xnorm1Xagreeableness + framing2Xnorm2Xagreeableness + framing2Xnorm3Xagreeableness + framing2Xnorm4Xagreeableness + framing1Xopenness + framing2Xopenness + norm1Xopenness + norm2Xopenness + norm3Xopenness + norm4Xopenness + framing1Xnorm1Xopenness + framing1Xnorm2Xopenness + framing1Xnorm3Xopenness + framing1Xnorm4Xopenness + framing2Xnorm1Xopenness + framing2Xnorm2Xopenness + framing2Xnorm3Xopenness + framing2Xnorm4Xopenness + framing1Xneuroticism + framing2Xneuroticism + norm1Xneuroticism + norm2Xneuroticism + norm3Xneuroticism + norm4Xneuroticism + framing1Xnorm1Xneuroticism + framing1Xnorm2Xneuroticism + framing1Xnorm3Xneuroticism + framing1Xnorm4Xneuroticism + framing2Xnorm1Xneuroticism + framing2Xnorm2Xneuroticism + framing2Xnorm3Xneuroticism + framing2Xnorm4Xneuroticism + framing1Xhonesty + framing2Xhonesty + norm1Xhonesty + norm2Xhonesty + norm3Xhonesty + norm4Xhonesty + framing1Xnorm1Xhonesty + framing1Xnorm2Xhonesty + framing1Xnorm3Xhonesty + framing1Xnorm4Xhonesty + framing2Xnorm1Xhonesty + framing2Xnorm2Xhonesty + framing2Xnorm3Xhonesty + framing2Xnorm4Xhonesty",
-               method = c("norm","norm","norm","norm","","norm","","norm","norm","","logreg","logreg","","","norm", "norm", "norm", "norm", "norm", "norm","","","","","","","FramingCode1*biospheric","FramingCode2*biospheric","NormCode1*biospheric","NormCode2*biospheric","NormCode3*biospheric","NormCode4*biospheric","FramingCode1*NormCode1*biospheric","FramingCode1*NormCode2*biospheric","FramingCode1*NormCode3*biospheric","FramingCode1*NormCode4*biospheric","FramingCode2*NormCode1*biospheric","FramingCode2*NormCode2*biospheric","FramingCode2*NormCode3*biospheric","FramingCode2*NormCode4*biospheric","FramingCode1*altruistic","FramingCode2*altruistic","NormCode1*altruistic","NormCode2*altruistic","NormCode3*altruistic","NormCode4*altruistic","FramingCode1*NormCode1*altruistic","FramingCode1*NormCode2*altruistic","FramingCode1*NormCode3*altruistic","FramingCode1*NormCode4*altruistic","FramingCode2*NormCode1*altruistic","FramingCode2*NormCode2*altruistic","FramingCode2*NormCode3*altruistic","FramingCode2*NormCode4*altruistic","FramingCode1*egoistic","FramingCode2*egoistic","NormCode1*egoistic","NormCode2*egoistic","NormCode3*egoistic","NormCode4*egoistic","FramingCode1*NormCode1*egoistic","FramingCode1*NormCode2*egoistic","FramingCode1*NormCode3*egoistic","FramingCode1*NormCode4*egoistic","FramingCode2*NormCode1*egoistic","FramingCode2*NormCode2*egoistic","FramingCode2*NormCode3*egoistic","FramingCode2*NormCode4*egoistic","FramingCode1*hedonic","FramingCode2*hedonic","NormCode1*hedonic","NormCode2*hedonic","NormCode3*hedonic","NormCode4*hedonic","FramingCode1*NormCode1*hedonic","FramingCode1*NormCode2*hedonic","FramingCode1*NormCode3*hedonic","FramingCode1*NormCode4*hedonic","FramingCode2*NormCode1*hedonic","FramingCode2*NormCode2*hedonic","FramingCode2*NormCode3*hedonic","FramingCode2*NormCode4*hedonic","","","","","","","","","","","","","","","FramingCode1*extraversion","FramingCode2*extraversion","NormCode1*extraversion","NormCode2*extraversion","NormCode3*extraversion","NormCode4*extraversion","FramingCode1*NormCode1*extraversion","FramingCode1*NormCode2*extraversion","FramingCode1*NormCode3*extraversion","FramingCode1*NormCode4*extraversion","FramingCode2*NormCode1*extraversion","FramingCode2*NormCode2*extraversion","FramingCode2*NormCode3*extraversion","FramingCode2*NormCode4*extraversion","FramingCode1*conscientiousness","FramingCode2*conscientiousness","NormCode1*conscientiousness","NormCode2*conscientiousness","NormCode3*conscientiousness","NormCode4*conscientiousness","FramingCode1*NormCode1*conscientiousness","FramingCode1*NormCode2*conscientiousness","FramingCode1*NormCode3*conscientiousness","FramingCode1*NormCode4*conscientiousness","FramingCode2*NormCode1*conscientiousness","FramingCode2*NormCode2*conscientiousness","FramingCode2*NormCode3*conscientiousness","FramingCode2*NormCode4*conscientiousness","FramingCode1*agreeableness","FramingCode2*agreeableness","NormCode1*agreeableness","NormCode2*agreeableness","NormCode3*agreeableness","NormCode4*agreeableness","FramingCode1*NormCode1*agreeableness","FramingCode1*NormCode2*agreeableness","FramingCode1*NormCode3*agreeableness","FramingCode1*NormCode4*agreeableness","FramingCode2*NormCode1*agreeableness","FramingCode2*NormCode2*agreeableness","FramingCode2*NormCode3*agreeableness","FramingCode2*NormCode4*agreeableness","FramingCode1*openness","FramingCode2*openness","NormCode1*openness","NormCode2*openness","NormCode3*openness","NormCode4*openness","FramingCode1*NormCode1*openness","FramingCode1*NormCode2*openness","FramingCode1*NormCode3*openness","FramingCode1*NormCode4*openness","FramingCode2*NormCode1*openness","FramingCode2*NormCode2*openness","FramingCode2*NormCode3*openness","FramingCode2*NormCode4*openness","FramingCode1*neuroticism","FramingCode2*neuroticism","NormCode1*neuroticism","NormCode2*neuroticism","NormCode3*neuroticism","NormCode4*neuroticism","FramingCode1*NormCode1*neuroticism","FramingCode1*NormCode2*neuroticism","FramingCode1*NormCode3*neuroticism","FramingCode1*NormCode4*neuroticism","FramingCode2*NormCode1*neuroticism","FramingCode2*NormCode2*neuroticism","FramingCode2*NormCode3*neuroticism","FramingCode2*NormCode4*neuroticism","FramingCode1*honesty","FramingCode2*honesty","NormCode1*honesty","NormCode2*honesty","NormCode3*honesty","NormCode4*honesty","FramingCode1*NormCode1*honesty","FramingCode1*NormCode2*honesty","FramingCode1*NormCode3*honesty","FramingCode1*NormCode4*honesty","FramingCode2*NormCode1*honesty","FramingCode2*NormCode2*honesty","FramingCode2*NormCode3*honesty","FramingCode2*NormCode4*honesty"))
+               smtype = "logistic", 
+               smformula = "consumer_behaviors ~ framing_condition + norm_condition + framing_condition*norm_condition + biospheric + altruistic + egoistic + hedonic + ingroup_identification + clothing_interest + self_deceptive_sdr + impress_manag_sdr + Age + Gender + framing1Xbiospheric + framing2Xbiospheric + norm1Xbiospheric + norm2Xbiospheric + norm3Xbiospheric + norm4Xbiospheric + framing1Xnorm1Xbiospheric + framing1Xnorm2Xbiospheric + framing1Xnorm3Xbiospheric + framing1Xnorm4Xbiospheric + framing2Xnorm1Xbiospheric + framing2Xnorm2Xbiospheric + framing2Xnorm3Xbiospheric + framing2Xnorm4Xbiospheric + framing1Xaltruistic + framing2Xaltruistic + norm1Xaltruistic + norm2Xaltruistic + norm3Xaltruistic + norm4Xaltruistic + framing1Xnorm1Xaltruistic + framing1Xnorm2Xaltruistic + framing1Xnorm3Xaltruistic + framing1Xnorm4Xaltruistic + framing2Xnorm1Xaltruistic + framing2Xnorm2Xaltruistic + framing2Xnorm3Xaltruistic + framing2Xnorm4Xaltruistic + framing1Xegoistic + framing2Xegoistic + norm1Xegoistic + norm2Xegoistic + norm3Xegoistic + norm4Xegoistic + framing1Xnorm1Xegoistic + framing1Xnorm2Xegoistic + framing1Xnorm3Xegoistic + framing1Xnorm4Xegoistic + framing2Xnorm1Xegoistic + framing2Xnorm2Xegoistic + framing2Xnorm3Xegoistic + framing2Xnorm4Xegoistic + framing1Xhedonic + framing2Xhedonic + norm1Xhedonic + norm2Xhedonic + norm3Xhedonic + norm4Xhedonic + framing1Xnorm1Xhedonic + framing1Xnorm2Xhedonic + framing1Xnorm3Xhedonic + framing1Xnorm4Xhedonic + framing2Xnorm1Xhedonic + framing2Xnorm2Xhedonic + framing2Xnorm3Xhedonic + framing2Xnorm4Xhedonic + framing1Xingroup + framing2Xingroup + norm1Xingroup + norm2Xingroup + norm3Xingroup + norm4Xingroup + framing1Xnorm1Xingroup + framing1Xnorm2Xingroup + framing1Xnorm3Xingroup + framing1Xnorm4Xingroup + framing2Xnorm1Xingroup + framing2Xnorm2Xingroup + framing2Xnorm3Xingroup + framing2Xnorm4Xingroup", 
+               method = c("norm","norm","norm","norm","","norm","","norm","norm","","","logreg","","","","","","","","","FramingCode1*biospheric","FramingCode2*biospheric","NormCode1*biospheric","NormCode2*biospheric","NormCode3*biospheric","NormCode4*biospheric","FramingCode1*NormCode1*biospheric","FramingCode1*NormCode2*biospheric","FramingCode1*NormCode3*biospheric","FramingCode1*NormCode4*biospheric","FramingCode2*NormCode1*biospheric","FramingCode2*NormCode2*biospheric","FramingCode2*NormCode3*biospheric","FramingCode2*NormCode4*biospheric","FramingCode1*altruistic","FramingCode2*altruistic","NormCode1*altruistic","NormCode2*altruistic","NormCode3*altruistic","NormCode4*altruistic","FramingCode1*NormCode1*altruistic","FramingCode1*NormCode2*altruistic","FramingCode1*NormCode3*altruistic","FramingCode1*NormCode4*altruistic","FramingCode2*NormCode1*altruistic","FramingCode2*NormCode2*altruistic","FramingCode2*NormCode3*altruistic","FramingCode2*NormCode4*altruistic","FramingCode1*egoistic","FramingCode2*egoistic","NormCode1*egoistic","NormCode2*egoistic","NormCode3*egoistic","NormCode4*egoistic","FramingCode1*NormCode1*egoistic","FramingCode1*NormCode2*egoistic","FramingCode1*NormCode3*egoistic","FramingCode1*NormCode4*egoistic","FramingCode2*NormCode1*egoistic","FramingCode2*NormCode2*egoistic","FramingCode2*NormCode3*egoistic","FramingCode2*NormCode4*egoistic","FramingCode1*hedonic","FramingCode2*hedonic","NormCode1*hedonic","NormCode2*hedonic","NormCode3*hedonic","NormCode4*hedonic","FramingCode1*NormCode1*hedonic","FramingCode1*NormCode2*hedonic","FramingCode1*NormCode3*hedonic","FramingCode1*NormCode4*hedonic","FramingCode2*NormCode1*hedonic","FramingCode2*NormCode2*hedonic","FramingCode2*NormCode3*hedonic","FramingCode2*NormCode4*hedonic","","","","","","","","","","","","","",""))
 ```
 
 
@@ -1021,74 +954,7 @@ impobject$imputations[[3]]$impress_manag_center <- impobject$imputations[[3]]$im
 impobject$imputations[[4]]$impress_manag_center <- impobject$imputations[[4]]$impress_manag_sdr - mean(impobject$imputations[[4]]$impress_manag_sdr)
 
 impobject$imputations[[5]]$impress_manag_center <- impobject$imputations[[5]]$impress_manag_sdr - mean(impobject$imputations[[5]]$impress_manag_sdr)
-
-# Extraversion
-impobject$imputations[[1]]$extraversion_center <- impobject$imputations[[1]]$extraversion - mean(impobject$imputations[[1]]$extraversion)
-
-impobject$imputations[[2]]$extraversion_center <- impobject$imputations[[2]]$extraversion - mean(impobject$imputations[[2]]$extraversion)
-
-impobject$imputations[[3]]$extraversion_center <- impobject$imputations[[3]]$extraversion - mean(impobject$imputations[[3]]$extraversion)
-
-impobject$imputations[[4]]$extraversion_center <- impobject$imputations[[4]]$extraversion - mean(impobject$imputations[[4]]$extraversion)
-
-impobject$imputations[[5]]$extraversion_center <- impobject$imputations[[5]]$extraversion - mean(impobject$imputations[[5]]$extraversion)
-
-# Conscientiousness
-impobject$imputations[[1]]$conscientiousness_center <- impobject$imputations[[1]]$conscientiousness - mean(impobject$imputations[[1]]$conscientiousness)
-
-impobject$imputations[[2]]$conscientiousness_center <- impobject$imputations[[2]]$conscientiousness - mean(impobject$imputations[[2]]$conscientiousness)
-
-impobject$imputations[[3]]$conscientiousness_center <- impobject$imputations[[3]]$conscientiousness - mean(impobject$imputations[[3]]$conscientiousness)
-
-impobject$imputations[[4]]$conscientiousness_center <- impobject$imputations[[4]]$conscientiousness - mean(impobject$imputations[[4]]$conscientiousness)
-
-impobject$imputations[[5]]$conscientiousness_center <- impobject$imputations[[5]]$conscientiousness - mean(impobject$imputations[[5]]$conscientiousness)
-
-# Agreeableness
-impobject$imputations[[1]]$agreeableness_center <- impobject$imputations[[1]]$agreeableness - mean(impobject$imputations[[1]]$agreeableness)
-
-impobject$imputations[[2]]$agreeableness_center <- impobject$imputations[[2]]$agreeableness - mean(impobject$imputations[[2]]$agreeableness)
-
-impobject$imputations[[3]]$agreeableness_center <- impobject$imputations[[3]]$agreeableness - mean(impobject$imputations[[3]]$agreeableness)
-
-impobject$imputations[[4]]$agreeableness_center <- impobject$imputations[[4]]$agreeableness - mean(impobject$imputations[[4]]$agreeableness)
-
-impobject$imputations[[5]]$agreeableness_center <- impobject$imputations[[5]]$agreeableness - mean(impobject$imputations[[5]]$agreeableness)
-
-# Openness
-impobject$imputations[[1]]$openness_center <- impobject$imputations[[1]]$openness - mean(impobject$imputations[[1]]$openness)
-
-impobject$imputations[[2]]$openness_center <- impobject$imputations[[2]]$openness - mean(impobject$imputations[[2]]$openness)
-
-impobject$imputations[[3]]$openness_center <- impobject$imputations[[3]]$openness - mean(impobject$imputations[[3]]$openness)
-
-impobject$imputations[[4]]$openness_center <- impobject$imputations[[4]]$openness - mean(impobject$imputations[[4]]$openness)
-
-impobject$imputations[[5]]$openness_center <- impobject$imputations[[5]]$openness - mean(impobject$imputations[[5]]$openness)
-
-# Neuroticism
-impobject$imputations[[1]]$neuroticism_center <- impobject$imputations[[1]]$neuroticism - mean(impobject$imputations[[1]]$neuroticism)
-
-impobject$imputations[[2]]$neuroticism_center <- impobject$imputations[[2]]$neuroticism - mean(impobject$imputations[[2]]$neuroticism)
-
-impobject$imputations[[3]]$neuroticism_center <- impobject$imputations[[3]]$neuroticism - mean(impobject$imputations[[3]]$neuroticism)
-
-impobject$imputations[[4]]$neuroticism_center <- impobject$imputations[[4]]$neuroticism - mean(impobject$imputations[[4]]$neuroticism)
-
-impobject$imputations[[5]]$neuroticism_center <- impobject$imputations[[5]]$neuroticism - mean(impobject$imputations[[5]]$neuroticism)
-
-# Honesty
-impobject$imputations[[1]]$honesty_center <- impobject$imputations[[1]]$honesty - mean(impobject$imputations[[1]]$honesty)
-
-impobject$imputations[[2]]$honesty_center <- impobject$imputations[[2]]$honesty - mean(impobject$imputations[[2]]$honesty)
-
-impobject$imputations[[3]]$honesty_center <- impobject$imputations[[3]]$honesty - mean(impobject$imputations[[3]]$honesty)
-
-impobject$imputations[[4]]$honesty_center <- impobject$imputations[[4]]$honesty - mean(impobject$imputations[[4]]$honesty)
-
-impobject$imputations[[5]]$honesty_center <- impobject$imputations[[5]]$honesty - mean(impobject$imputations[[5]]$honesty)
 ```
-
 
 
 
@@ -1105,354 +971,344 @@ complete_data <- complete(mids_obj, "long")
 
 
 
+# Logistic Analysis (DV = Consumer Behaviors)
+
+Consumer Behaviors
+
+* 0 = New Clothing
+* 1 = Secondhand Clothing
+
 
 ## Running Model
-```{r}
-mod_mice <- with(mids_obj, lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + framing_condition*norm_condition*extraversion_center + framing_condition*norm_condition*conscientiousness_center + framing_condition*norm_condition*agreeableness_center + framing_condition*norm_condition*openness_center + framing_condition*norm_condition*neuroticism_center + framing_condition*norm_condition*honesty_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center))
+```{r echo = FALSE}
+log_mice <- with(mids_obj, glm(consumer_behaviors ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, family = "binomial"))
 ```
 
 ```{r}
-pool_obj <- pool(mod_mice)
+log_pool_obj <- pool(log_mice)
+```
 
-pool_obj
+```{r}
+log_mice
+```
+
+* df_residual = 1038
+* residual deviance: 1329
+
+## Model Summary
+
+Full summary
+```{r include = FALSE}
+log_summ_pool <- summary(pool(log_mice))
+log_summ_pool
 ```
 
 
 ## Pooled Regression Results
 
-Using `mice` package:
 ```{r}
-# summary(pool(mod_mice))
-
-pool_summ <- summary(pool(mod_mice)) %>%
-  knitr::kable(digits = 5)
-
-pool_summ
-```
-
-
-## Pooled Anova Results
-```{r echo = FALSE}
-anova_pool <- mi.anova(mi.res = mids_obj, formula = "consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + framing_condition*norm_condition*extraversion_center + framing_condition*norm_condition*conscientiousness_center + framing_condition*norm_condition*agreeableness_center + framing_condition*norm_condition*openness_center + framing_condition*norm_condition*neuroticism_center + framing_condition*norm_condition*honesty_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center", type = 3) 
-```
-
-
-```{r}
-anova_pool %>%
+summary(pool(log_mice)) %>%
   knitr::kable(digits = 3)
+```
+
+### Odds Ratios
+
+Converting log odds estimates to odds ratios:
+```{r}
+ORs_pool <- cbind(log_summ_pool$term, exp(log_summ_pool$estimate))
+
+ORs_pool %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+
+## Model Comparisons for Testing Interactions
+
+### FramingXnorm interaction
+```{r}
+log_minus_frameXnorm <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_frameXnorm
+```
+
+
+* df_residual = 1046 (1038 is df_resid from full log model + 8 contrast codes for interaction)
+* residual deviance = 1335
+* residual deviance from full log model = 1329
+
+```{r}
+anova(log_mice, log_minus_frameXnorm)
+```
+
+* Inclusion of framing X norm interaction does not account for significantly more variance in the model
+
+
+### FramingXbiospheric interaction
+```{r}
+log_minus_frameXbio <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_frameXbio
+```
+
+
+```{r}
+anova(log_mice, log_minus_frameXbio) # gives same results as D1() function
+```
+
+
+
+
+### FramingXaltruistic interaction
+```{r}
+log_minus_frameXalt <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_frameXalt
+```
+
+
+```{r}
+anova(log_mice, log_minus_frameXalt)
+```
+
+
+
+### FramingXegoistic interaction
+```{r}
+log_minus_frameXego <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_frameXego
+```
+
+
+```{r}
+anova(log_mice, log_minus_frameXego)
+```
+
+
+
+### FramingXhedonic interaction
+```{r}
+log_minus_frameXhed <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_frameXhed
+```
+
+
+```{r}
+anova(log_mice, log_minus_frameXhed)
+```
+
+
+
+### FrameXingroup interaction
+```{r}
+log_minus_frameXingroup <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_frameXingroup
+```
+
+
+```{r}
+anova(log_mice, log_minus_frameXingroup)
+```
+
+
+
+
+
+### NormXbiospheric interaction
+```{r}
+log_minus_normXbio <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_normXbio
+```
+
+
+```{r}
+anova(log_mice, log_minus_normXbio)
+```
+
+
+
+
+### NormXaltruistic interaction
+```{r}
+log_minus_normXalt <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_normXalt
+```
+
+
+```{r}
+anova(log_mice, log_minus_normXalt)
+```
+
+
+
+### NormXegoistic interaction
+```{r}
+log_minus_normXego <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_normXego
+```
+
+
+```{r}
+anova(log_mice, log_minus_normXego)
+```
+
+
+
+### NormXhedonic interaction
+```{r}
+log_minus_normXhed <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_normXhed
+```
+
+
+```{r}
+anova(log_mice, log_minus_normXhed)
+```
+
+
+
+### NormXingroup interaction
+```{r}
+log_minus_normXingroup <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_normXingroup
+```
+
+
+```{r}
+anova(log_mice, log_minus_normXingroup)
+```
+
+
+
+
+
+
+### FrameXnormXbiospheric interaction
+```{r}
+log_minus_frameXnormXbio <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_frameXnormXbio
+```
+
+
+```{r}
+anova(log_mice, log_minus_frameXnormXbio)
+```
+
+
+
+
+### FrameXnormXaltruistic interaction
+```{r}
+log_minus_frameXnormXalt <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_frameXnormXalt
+```
+
+
+```{r}
+anova(log_mice, log_minus_frameXnormXalt)
+```
+
+
+
+### FrameXnormXegoistic interaction
+```{r}
+log_minus_frameXnormXego <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_frameXnormXego
+```
+
+
+```{r}
+anova(log_mice, log_minus_frameXnormXego)
+```
+
+
+
+### FrameXnormXhedonic interaction
+```{r}
+log_minus_frameXnormXhed <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_frameXnormXhed
+```
+
+
+```{r}
+anova(log_mice, log_minus_frameXnormXhed)
+```
+
+
+
+### FrameXnormXingroup interaction
+```{r}
+log_minus_frameXnormXingroup <- with(mids_obj, glm(consumer_behaviors ~ framing_condition + norm_condition + biospheric_center + altruistic_center + egoistic_center + hedonic_center + ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center, family = "binomial"))
+```
+
+Full model results
+```{r include = FALSE}
+log_minus_frameXnormXingroup
+```
+
+
+```{r}
+anova(log_mice, log_minus_frameXnormXingroup)
 ```
 
 
 
 # Simple Effects
-
-* add data points onto graphs (see if dotarg = list(color = "black") works)
-* add test of significance of simple slopes
-* remove CI bars where it's obscuring the findings (or make thinner?)
-
-## Personality Interactions
-
-### Extraversion
-
-First, relationship between extraversion & consumer intentions for each norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition, var = "extraversion_center", adjust = "none")
-
-# On a single graph
-at_list <- list(extraversion_center = seq(-2.2, 2, by = 1))
-
-emmip(mod_mice, norm_condition ~ extraversion_center, at = at_list, CIs = TRUE, xlab = "Extraversion (centered)", ylab = "Consumer Intentions", dotarg = list(color = "black"))
-```
-
-
-Is the slope of the relationship between extraversion & consumer intentions stronger in any one of the norm conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~norm_condition, var = "extraversion_center", adjust = "none")
-```
-
-
-Second, relationship between extraversion & consumer intentions for each framing condition:
-```{r}
-emtrends(mod_mice, ~framing_condition, var = "extraversion_center", adjust = "none")
-
-# On a single graph
-at_list <- list(extraversion_center = seq(-2.2, 2, by = 1))
-
-emmip(mod_mice, framing_condition ~ extraversion_center, at = at_list, CIs = TRUE, xlab = "Extraversion (centered)", ylab = "Consumer Intentions")
-```
-
-
-Is the slope of the relationship between extraversion & consumer intentions stronger in any one of the framing conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~framing_condition, var = "extraversion_center", adjust = "none")
-```
-
-
-Third, interaction between extraversion, framing, & norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition | framing_condition, var = "extraversion_center", adjust = "none")
-
-# Separate graph for each framing condition
-at_list <- list(extraversion_center = seq(-2.2, 2, by = 1))
-
-emmip(mod_mice, norm_condition ~ extraversion_center | framing_condition, at = at_list, CIs = TRUE, xlab = "Extraversion (centered)", ylab = "Consumer Intentions")
-```
-
-
-
-
-
-### Agreeableness
-
-First, relationship between agreeableness & consumer intentions for each norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition, var = "agreeableness_center", adjust = "none")
-
-# On a single graph
-at_list <- list(agreeableness_center = seq(-2, 1.4, by = 1))
-
-emmip(mod_mice, norm_condition ~ agreeableness_center, at = at_list, CIs = TRUE, xlab = "agreeableness (centered)", ylab = "Consumer Intentions")
-```
-
-
-Is the slope of the relationship between agreeableness & consumer intentions stronger in any one of the norm conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~norm_condition, var = "agreeableness_center", adjust = "none")
-```
-
-
-Second, relationship between agreeableness & consumer intentions for each framing condition:
-```{r}
-emtrends(mod_mice, ~framing_condition, var = "agreeableness_center", adjust = "none")
-
-# On a single graph
-at_list <- list(agreeableness_center = seq(-2, 1.4, by = 1))
-
-emmip(mod_mice, framing_condition ~ agreeableness_center, at = at_list, CIs = TRUE, xlab = "agreeableness (centered)", ylab = "Consumer Intentions")
-```
-
-
-Is the slope of the relationship between agreeableness & consumer intentions stronger in any one of the framing conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~framing_condition, var = "agreeableness_center", adjust = "none")
-```
-
-
-Third, interaction between agreeableness, framing, & norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition | framing_condition, var = "agreeableness_center", adjust = "none")
-
-# Separate graph for each framing condition
-at_list <- list(agreeableness_center = seq(-2, 1.4, by = 1))
-
-emmip(mod_mice, norm_condition ~ agreeableness_center | framing_condition, at = at_list, CIs = TRUE, xlab = "agreeableness (centered)", ylab = "Consumer Intentions")
-```
-
-
-
-
-
-### Openness
-
-First, relationship between openness & consumer intentions for each norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition, var = "openness_center", adjust = "none")
-
-# On a single graph
-at_list <- list(openness_center = seq(-2.5, 1.4, by = 1))
-
-emmip(mod_mice, norm_condition ~ openness_center, at = at_list, CIs = TRUE, xlab = "openness (centered)", ylab = "Consumer Intentions")
-```
-
-
-Is the slope of the relationship between openness & consumer intentions stronger in any one of the norm conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~norm_condition, var = "openness_center", adjust = "none")
-```
-
-
-Second, relationship between openness & consumer intentions for each framing condition:
-```{r}
-emtrends(mod_mice, ~framing_condition, var = "openness_center", adjust = "none")
-
-# On a single graph
-at_list <- list(openness_center = seq(-2.5, 1.4, by = 1))
-
-emmip(mod_mice, framing_condition ~ openness_center, at = at_list, CIs = TRUE, xlab = "openness (centered)", ylab = "Consumer Intentions")
-```
-
-
-Is the slope of the relationship between openness & consumer intentions stronger in any one of the framing conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~framing_condition, var = "openness_center", adjust = "none")
-```
-
-
-Third, interaction between openness, framing, & norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition | framing_condition, var = "openness_center", adjust = "none")
-
-# Separate graph for each framing condition
-at_list <- list(openness_center = seq(-2.5, 1.4, by = 1))
-
-emmip(mod_mice, norm_condition ~ openness_center | framing_condition, at = at_list, CIs = TRUE, xlab = "openness (centered)", ylab = "Consumer Intentions")
-```
-
-
-
-
-
-### Conscientiousness
-
-First, relationship between conscientiousness & consumer intentions for each norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition, var = "conscientiousness_center", adjust = "none")
-
-# On a single graph
-at_list <- list(conscientiousness_center = seq(-2.1, 1.7, by = 1))
-
-emmip(mod_mice, norm_condition ~ conscientiousness_center, at = at_list, CIs = TRUE, xlab = "conscientiousness (centered)", ylab = "Consumer Intentions")
-```
-
-
-Is the slope of the relationship between conscientiousness & consumer intentions stronger in any one of the norm conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~norm_condition, var = "conscientiousness_center", adjust = "none")
-```
-
-
-Second, relationship between conscientiousness & consumer intentions for each framing condition:
-```{r}
-emtrends(mod_mice, ~framing_condition, var = "conscientiousness_center", adjust = "none")
-
-# On a single graph
-at_list <- list(conscientiousness_center = seq(-2.1, 1.7, by = 1))
-
-emmip(mod_mice, framing_condition ~ conscientiousness_center, at = at_list, CIs = TRUE, xlab = "conscientiousness (centered)", ylab = "Consumer Intentions")
-```
-
-
-Is the slope of the relationship between conscientiousness & consumer intentions stronger in any one of the framing conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~framing_condition, var = "conscientiousness_center", adjust = "none")
-```
-
-
-Third, interaction between conscientiousness, framing, & norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition | framing_condition, var = "conscientiousness_center", adjust = "none")
-
-# Separate graph for each framing condition
-at_list <- list(conscientiousness_center = seq(-2.1, 1.7, by = 1))
-
-emmip(mod_mice, norm_condition ~ conscientiousness_center | framing_condition, at = at_list, CIs = TRUE, xlab = "conscientiousness (centered)", ylab = "Consumer Intentions")
-```
-
-
-
-
-### Neuroticism
-
-First, relationship between neuroticism & consumer intentions for each norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition, var = "neuroticism_center", adjust = "none")
-
-# On a single graph
-at_list <- list(neuroticism_center = seq(-2.2, 2.1, by = 1))
-
-emmip(mod_mice, norm_condition ~ neuroticism_center, at = at_list, CIs = TRUE, xlab = "neuroticism (centered)", ylab = "Consumer Intentions")
-```
-
-
-Is the slope of the relationship between neuroticism & consumer intentions stronger in any one of the norm conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~norm_condition, var = "neuroticism_center", adjust = "none")
-```
-
-
-Second, relationship between neuroticism & consumer intentions for each framing condition:
-```{r}
-emtrends(mod_mice, ~framing_condition, var = "neuroticism_center", adjust = "none")
-
-# On a single graph
-at_list <- list(neuroticism_center = seq(-2.2, 2.1, by = 1))
-
-emmip(mod_mice, framing_condition ~ neuroticism_center, at = at_list, CIs = TRUE, xlab = "neuroticism (centered)", ylab = "Consumer Intentions")
-```
-
-
-Is the slope of the relationship between neuroticism & consumer intentions stronger in any one of the framing conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~framing_condition, var = "neuroticism_center", adjust = "none")
-```
-
-
-Third, interaction between neuroticism, framing, & norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition | framing_condition, var = "neuroticism_center", adjust = "none")
-
-# Separate graph for each framing condition
-at_list <- list(neuroticism_center = seq(-2.2, 2.1, by = 1))
-
-emmip(mod_mice, norm_condition ~ neuroticism_center | framing_condition, at = at_list, CIs = TRUE, xlab = "neuroticism (centered)", ylab = "Consumer Intentions")
-```
-
-
-
-### Honesty
-
-First, relationship between honesty & consumer intentions for each norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition, var = "honesty_center", adjust = "none")
-
-# On a single graph
-at_list <- list(honesty_center = seq(-2.5, 1.6, by = 1))
-
-emmip(mod_mice, norm_condition ~ honesty_center, at = at_list, CIs = TRUE, xlab = "honesty (centered)", ylab = "Consumer Intentions")
-```
-
-
-Is the slope of the relationship between honesty & consumer intentions stronger in any one of the norm conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~norm_condition, var = "honesty_center", adjust = "none")
-```
-
-
-Second, relationship between honesty & consumer intentions for each framing condition:
-```{r}
-emtrends(mod_mice, ~framing_condition, var = "honesty_center", adjust = "none")
-
-# On a single graph
-at_list <- list(honesty_center = seq(-2.5, 1.6, by = 1))
-
-emmip(mod_mice, framing_condition ~ honesty_center, at = at_list, CIs = TRUE, xlab = "honesty (centered)", ylab = "Consumer Intentions")
-```
-
-
-Is the slope of the relationship between honesty & consumer intentions stronger in any one of the framing conditions compared to the others?
-
-```{r}
-emtrends(mod_mice, pairwise~framing_condition, var = "honesty_center", adjust = "none")
-```
-
-
-Third, interaction between honesty, framing, & norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition | framing_condition, var = "honesty_center", adjust = "none")
-
-# Separate graph for each framing condition
-at_list <- list(honesty_center = seq(-2.5, 1.6, by = 1))
-
-emmip(mod_mice, norm_condition ~ honesty_center | framing_condition, at = at_list, CIs = TRUE, xlab = "honesty (centered)", ylab = "Consumer Intentions")
-```
