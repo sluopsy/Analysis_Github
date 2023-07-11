@@ -1,12 +1,15 @@
 ---
 title: "log_analysis_with_MI_smcfcs"
-output: 
+output:
+  word_document:
+    toc: yes
+    toc_depth: '3'
   html_document:
-    toc: true
+    toc: yes
     toc_depth: 3
-    toc_float: true
+    toc_float: yes
 date: "2023-03-29"
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
 
@@ -833,7 +836,7 @@ set.seed(114950518)
 ```{r echo = FALSE}
 imps <- smcfcs(data_R_alt, 
                smtype = "logistic", 
-               smformula = "consumer_behaviors ~ framing_condition + norm_condition + framing_condition*norm_condition + biospheric + altruistic + egoistic + hedonic + ingroup_identification + clothing_interest + self_deceptive_sdr + impress_manag_sdr + Age + Gender + framing1Xbiospheric + framing2Xbiospheric + norm1Xbiospheric + norm2Xbiospheric + norm3Xbiospheric + norm4Xbiospheric + framing1Xnorm1Xbiospheric + framing1Xnorm2Xbiospheric + framing1Xnorm3Xbiospheric + framing1Xnorm4Xbiospheric + framing2Xnorm1Xbiospheric + framing2Xnorm2Xbiospheric + framing2Xnorm3Xbiospheric + framing2Xnorm4Xbiospheric + framing1Xaltruistic + framing2Xaltruistic + norm1Xaltruistic + norm2Xaltruistic + norm3Xaltruistic + norm4Xaltruistic + framing1Xnorm1Xaltruistic + framing1Xnorm2Xaltruistic + framing1Xnorm3Xaltruistic + framing1Xnorm4Xaltruistic + framing2Xnorm1Xaltruistic + framing2Xnorm2Xaltruistic + framing2Xnorm3Xaltruistic + framing2Xnorm4Xaltruistic + framing1Xegoistic + framing2Xegoistic + norm1Xegoistic + norm2Xegoistic + norm3Xegoistic + norm4Xegoistic + framing1Xnorm1Xegoistic + framing1Xnorm2Xegoistic + framing1Xnorm3Xegoistic + framing1Xnorm4Xegoistic + framing2Xnorm1Xegoistic + framing2Xnorm2Xegoistic + framing2Xnorm3Xegoistic + framing2Xnorm4Xegoistic + framing1Xhedonic + framing2Xhedonic + norm1Xhedonic + norm2Xhedonic + norm3Xhedonic + norm4Xhedonic + framing1Xnorm1Xhedonic + framing1Xnorm2Xhedonic + framing1Xnorm3Xhedonic + framing1Xnorm4Xhedonic + framing2Xnorm1Xhedonic + framing2Xnorm2Xhedonic + framing2Xnorm3Xhedonic + framing2Xnorm4Xhedonic + framing1Xingroup + framing2Xingroup + norm1Xingroup + norm2Xingroup + norm3Xingroup + norm4Xingroup + framing1Xnorm1Xingroup + framing1Xnorm2Xingroup + framing1Xnorm3Xingroup + framing1Xnorm4Xingroup + framing2Xnorm1Xingroup + framing2Xnorm2Xingroup + framing2Xnorm3Xingroup + framing2Xnorm4Xingroup", 
+               smformula = "consumer_behaviors ~ framing_condition + norm_condition + framing_condition*norm_condition + ingroup_identification + framing1Xingroup + framing2Xingroup + norm1Xingroup + norm2Xingroup + norm3Xingroup + norm4Xingroup + framing1Xnorm1Xingroup + framing1Xnorm2Xingroup + framing1Xnorm3Xingroup + framing1Xnorm4Xingroup + framing2Xnorm1Xingroup + framing2Xnorm2Xingroup + framing2Xnorm3Xingroup + framing2Xnorm4Xingroup + consumer_intentions + clothing_interest + self_deceptive_sdr + impress_manag_sdr + biospheric + framing1Xbiospheric + framing2Xbiospheric + norm1Xbiospheric + norm2Xbiospheric + norm3Xbiospheric + norm4Xbiospheric + framing1Xnorm1Xbiospheric + framing1Xnorm2Xbiospheric + framing1Xnorm3Xbiospheric + framing1Xnorm4Xbiospheric + framing2Xnorm1Xbiospheric + framing2Xnorm2Xbiospheric + framing2Xnorm3Xbiospheric + framing2Xnorm4Xbiospheric + altruistic + framing1Xaltruistic + framing2Xaltruistic + norm1Xaltruistic + norm2Xaltruistic + norm3Xaltruistic + norm4Xaltruistic + framing1Xnorm1Xaltruistic + framing1Xnorm2Xaltruistic + framing1Xnorm3Xaltruistic + framing1Xnorm4Xaltruistic + framing2Xnorm1Xaltruistic + framing2Xnorm2Xaltruistic + framing2Xnorm3Xaltruistic + framing2Xnorm4Xaltruistic + egoistic + framing1Xegoistic + framing2Xegoistic + norm1Xegoistic + norm2Xegoistic + norm3Xegoistic + norm4Xegoistic + framing1Xnorm1Xegoistic + framing1Xnorm2Xegoistic + framing1Xnorm3Xegoistic + framing1Xnorm4Xegoistic + framing2Xnorm1Xegoistic + framing2Xnorm2Xegoistic + framing2Xnorm3Xegoistic + framing2Xnorm4Xegoistic + hedonic + framing1Xhedonic + framing2Xhedonic + norm1Xhedonic + norm2Xhedonic + norm3Xhedonic + norm4Xhedonic + framing1Xnorm1Xhedonic + framing1Xnorm2Xhedonic + framing1Xnorm3Xhedonic + framing1Xnorm4Xhedonic + framing2Xnorm1Xhedonic + framing2Xnorm2Xhedonic + framing2Xnorm3Xhedonic + framing2Xnorm4Xhedonic + consumer_intentions + Gender + Age", 
                method = c("norm","norm","norm","norm","","norm","","norm","norm","","","logreg","","","","","","","","","FramingCode1*biospheric","FramingCode2*biospheric","NormCode1*biospheric","NormCode2*biospheric","NormCode3*biospheric","NormCode4*biospheric","FramingCode1*NormCode1*biospheric","FramingCode1*NormCode2*biospheric","FramingCode1*NormCode3*biospheric","FramingCode1*NormCode4*biospheric","FramingCode2*NormCode1*biospheric","FramingCode2*NormCode2*biospheric","FramingCode2*NormCode3*biospheric","FramingCode2*NormCode4*biospheric","FramingCode1*altruistic","FramingCode2*altruistic","NormCode1*altruistic","NormCode2*altruistic","NormCode3*altruistic","NormCode4*altruistic","FramingCode1*NormCode1*altruistic","FramingCode1*NormCode2*altruistic","FramingCode1*NormCode3*altruistic","FramingCode1*NormCode4*altruistic","FramingCode2*NormCode1*altruistic","FramingCode2*NormCode2*altruistic","FramingCode2*NormCode3*altruistic","FramingCode2*NormCode4*altruistic","FramingCode1*egoistic","FramingCode2*egoistic","NormCode1*egoistic","NormCode2*egoistic","NormCode3*egoistic","NormCode4*egoistic","FramingCode1*NormCode1*egoistic","FramingCode1*NormCode2*egoistic","FramingCode1*NormCode3*egoistic","FramingCode1*NormCode4*egoistic","FramingCode2*NormCode1*egoistic","FramingCode2*NormCode2*egoistic","FramingCode2*NormCode3*egoistic","FramingCode2*NormCode4*egoistic","FramingCode1*hedonic","FramingCode2*hedonic","NormCode1*hedonic","NormCode2*hedonic","NormCode3*hedonic","NormCode4*hedonic","FramingCode1*NormCode1*hedonic","FramingCode1*NormCode2*hedonic","FramingCode1*NormCode3*hedonic","FramingCode1*NormCode4*hedonic","FramingCode2*NormCode1*hedonic","FramingCode2*NormCode2*hedonic","FramingCode2*NormCode3*hedonic","FramingCode2*NormCode4*hedonic","","","","","","","","","","","","","",""))
 ```
 
@@ -842,6 +845,82 @@ Storing imputed data sets
 ```{r}
 impobject <- imputationList(imps$impDatasets)
 ```
+
+
+Restrict range of values on imputed variables
+```{r}
+# bio values
+impobject$imputations[[1]]$biospheric <- ifelse(impobject$imputations[[1]]$biospheric > 7, 7, impobject$imputations[[1]]$biospheric)
+
+impobject$imputations[[2]]$biospheric <- ifelse(impobject$imputations[[2]]$biospheric > 7, 7, impobject$imputations[[2]]$biospheric)
+
+impobject$imputations[[3]]$biospheric <- ifelse(impobject$imputations[[3]]$biospheric > 7, 7, impobject$imputations[[3]]$biospheric)
+
+impobject$imputations[[4]]$biospheric <- ifelse(impobject$imputations[[4]]$biospheric > 7, 7, impobject$imputations[[4]]$biospheric)
+
+impobject$imputations[[5]]$biospheric <- ifelse(impobject$imputations[[5]]$biospheric > 7, 7, impobject$imputations[[5]]$biospheric)
+
+
+# alt values
+impobject$imputations[[1]]$altruistic <- ifelse(impobject$imputations[[1]]$altruistic > 7, 7, impobject$imputations[[1]]$altruistic)
+
+impobject$imputations[[2]]$altruistic <- ifelse(impobject$imputations[[2]]$altruistic > 7, 7, impobject$imputations[[2]]$altruistic)
+
+impobject$imputations[[3]]$altruistic <- ifelse(impobject$imputations[[3]]$altruistic > 7, 7, impobject$imputations[[3]]$altruistic)
+
+impobject$imputations[[4]]$altruistic <- ifelse(impobject$imputations[[4]]$altruistic > 7, 7, impobject$imputations[[4]]$altruistic)
+
+impobject$imputations[[5]]$altruistic <- ifelse(impobject$imputations[[5]]$altruistic > 7, 7, impobject$imputations[[5]]$altruistic)
+
+
+# ego values
+impobject$imputations[[1]]$egoistic <- ifelse(impobject$imputations[[1]]$egoistic > 7, 7, impobject$imputations[[1]]$egoistic)
+
+impobject$imputations[[2]]$egoistic <- ifelse(impobject$imputations[[2]]$egoistic > 7, 7, impobject$imputations[[2]]$egoistic)
+
+impobject$imputations[[3]]$egoistic <- ifelse(impobject$imputations[[3]]$egoistic > 7, 7, impobject$imputations[[3]]$egoistic)
+
+impobject$imputations[[4]]$egoistic <- ifelse(impobject$imputations[[4]]$egoistic > 7, 7, impobject$imputations[[4]]$egoistic)
+
+impobject$imputations[[5]]$egoistic <- ifelse(impobject$imputations[[5]]$egoistic > 7, 7, impobject$imputations[[5]]$egoistic)
+
+
+# hed values
+impobject$imputations[[1]]$hedonic <- ifelse(impobject$imputations[[1]]$hedonic > 7, 7, impobject$imputations[[1]]$hedonic)
+
+impobject$imputations[[2]]$hedonic <- ifelse(impobject$imputations[[2]]$hedonic > 7, 7, impobject$imputations[[2]]$hedonic)
+
+impobject$imputations[[3]]$hedonic <- ifelse(impobject$imputations[[3]]$hedonic > 7, 7, impobject$imputations[[3]]$hedonic)
+
+impobject$imputations[[4]]$hedonic <- ifelse(impobject$imputations[[4]]$hedonic > 7, 7, impobject$imputations[[4]]$hedonic)
+
+impobject$imputations[[5]]$hedonic <- ifelse(impobject$imputations[[5]]$hedonic > 7, 7, impobject$imputations[[5]]$hedonic)
+
+
+# self-deceptive enhancement
+with(impobject, describe(self_deceptive_sdr))
+
+impobject$imputations[[4]]$self_deceptive_sdr <- ifelse(impobject$imputations[[4]]$self_deceptive_sdr < 1, 1, impobject$imputations[[4]]$self_deceptive_sdr)
+
+
+# impr manag
+with(impobject, describe(impress_manag_sdr))
+
+# Age
+describe(data_R_alt$Age)
+with(impobject, describe(Age))
+
+impobject$imputations[[1]]$Age <- ifelse(impobject$imputations[[1]]$Age < 18, 18, impobject$imputations[[1]]$Age)
+
+impobject$imputations[[2]]$Age <- ifelse(impobject$imputations[[2]]$Age < 18, 18, impobject$imputations[[2]]$Age)
+
+impobject$imputations[[3]]$Age <- ifelse(impobject$imputations[[3]]$Age < 18, 18, impobject$imputations[[3]]$Age)
+
+impobject$imputations[[4]]$Age <- ifelse(impobject$imputations[[4]]$Age < 18, 18, impobject$imputations[[4]]$Age)
+
+impobject$imputations[[5]]$Age <- ifelse(impobject$imputations[[5]]$Age < 18, 18, impobject$imputations[[5]]$Age)
+```
+
 
 ### Centering continuous predictors
 ```{r}
@@ -954,6 +1033,13 @@ impobject$imputations[[3]]$impress_manag_center <- impobject$imputations[[3]]$im
 impobject$imputations[[4]]$impress_manag_center <- impobject$imputations[[4]]$impress_manag_sdr - mean(impobject$imputations[[4]]$impress_manag_sdr)
 
 impobject$imputations[[5]]$impress_manag_center <- impobject$imputations[[5]]$impress_manag_sdr - mean(impobject$imputations[[5]]$impress_manag_sdr)
+
+# Coding Gender
+contrasts(impobject$imputations[[1]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[2]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[3]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[4]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[5]]$Gender) <- c(1/2, -1/2)
 ```
 
 
@@ -988,7 +1074,7 @@ log_mice <- with(mids_obj, glm(consumer_behaviors ~ framing_condition*norm_condi
 log_pool_obj <- pool(log_mice)
 ```
 
-```{r}
+```{r include = FALSE}
 log_mice
 ```
 
@@ -1010,6 +1096,16 @@ log_summ_pool
 summary(pool(log_mice)) %>%
   knitr::kable(digits = 3)
 ```
+
+APA-style table
+```{r}
+pool_summ <- summary(pool(log_mice))
+
+apa_table(pool_summ,
+          caption = "Pooled Logistic Regression Results",
+          note = "DV = Consumer Behaviors")
+```
+
 
 ### Odds Ratios
 

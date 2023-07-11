@@ -14,11 +14,14 @@ editor_options:
 ---
 
 To do:
-  * add CIs to simple slope comparison tables
-    + should CIs or effect sizes be added to anything else?
+
+  * add CIs to simple slope comparison tables?
+    + should CIs or effect sizes be added?
   * how to test H3?
-  * logistic analysis...
-  * analysis with missing data...
+  * logistic analysis
+    + simple effects?
+    + marginal means/descriptives?
+  * regression diagnostics for multiply imputed model
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
@@ -54,6 +57,8 @@ library(epiDisplay) # for frequency tables
 library(papaja) # for APA printing
 library(car) # for Anova function (type III ss)
 library(lsr) # for etaSquared
+library(modeest) # for mode (using mlv function)
+library(cowplot) # for plot_grid to display multiple plots
 
 
 options(max.print = 100000) # max rows to print in output
@@ -738,7 +743,17 @@ levels(data_R_alt$Gender)
 
 ```{r}
 data_R_alt %>%
+  dplyr::select(framing_condition, norm_condition, hedonic, egoistic, altruistic, biospheric, ingroup_identification, self_deceptive_sdr, impress_manag_sdr, consumer_intentions, consumer_behaviors, Age, Gender, clothing_interest) %>%
   vis_miss()
+
+n_missing <- data_R_alt %>%
+  dplyr::select(framing_condition, norm_condition, hedonic, egoistic, altruistic, biospheric, ingroup_identification, self_deceptive_sdr, impress_manag_sdr, consumer_intentions, consumer_behaviors, Age, Gender, clothing_interest) %>%
+  lapply(function(x) sum(is.na(x)))
+
+n_missing
+
+# percent missing
+lapply(n_missing, function(x) (x/nrow(data_R_alt))*100)
 ```
 
 Variables with NO missing data:
@@ -748,6 +763,7 @@ Variables with NO missing data:
 * consumer_intentions
 * framing_condition
 * norm_condition
+
 
 
 ## Adding interaction terms
@@ -851,6 +867,81 @@ Storing imputed data sets
 ```{r echo = FALSE}
 impobject <- imputationList(imps$impDatasets)
 ```
+
+Restrict range of values on imputed variables
+```{r}
+# bio values
+impobject$imputations[[1]]$biospheric <- ifelse(impobject$imputations[[1]]$biospheric > 7, 7, impobject$imputations[[1]]$biospheric)
+
+impobject$imputations[[2]]$biospheric <- ifelse(impobject$imputations[[2]]$biospheric > 7, 7, impobject$imputations[[2]]$biospheric)
+
+impobject$imputations[[3]]$biospheric <- ifelse(impobject$imputations[[3]]$biospheric > 7, 7, impobject$imputations[[3]]$biospheric)
+
+impobject$imputations[[4]]$biospheric <- ifelse(impobject$imputations[[4]]$biospheric > 7, 7, impobject$imputations[[4]]$biospheric)
+
+impobject$imputations[[5]]$biospheric <- ifelse(impobject$imputations[[5]]$biospheric > 7, 7, impobject$imputations[[5]]$biospheric)
+
+
+# alt values
+impobject$imputations[[1]]$altruistic <- ifelse(impobject$imputations[[1]]$altruistic > 7, 7, impobject$imputations[[1]]$altruistic)
+
+impobject$imputations[[2]]$altruistic <- ifelse(impobject$imputations[[2]]$altruistic > 7, 7, impobject$imputations[[2]]$altruistic)
+
+impobject$imputations[[3]]$altruistic <- ifelse(impobject$imputations[[3]]$altruistic > 7, 7, impobject$imputations[[3]]$altruistic)
+
+impobject$imputations[[4]]$altruistic <- ifelse(impobject$imputations[[4]]$altruistic > 7, 7, impobject$imputations[[4]]$altruistic)
+
+impobject$imputations[[5]]$altruistic <- ifelse(impobject$imputations[[5]]$altruistic > 7, 7, impobject$imputations[[5]]$altruistic)
+
+
+# ego values
+impobject$imputations[[1]]$egoistic <- ifelse(impobject$imputations[[1]]$egoistic > 7, 7, impobject$imputations[[1]]$egoistic)
+
+impobject$imputations[[2]]$egoistic <- ifelse(impobject$imputations[[2]]$egoistic > 7, 7, impobject$imputations[[2]]$egoistic)
+
+impobject$imputations[[3]]$egoistic <- ifelse(impobject$imputations[[3]]$egoistic > 7, 7, impobject$imputations[[3]]$egoistic)
+
+impobject$imputations[[4]]$egoistic <- ifelse(impobject$imputations[[4]]$egoistic > 7, 7, impobject$imputations[[4]]$egoistic)
+
+impobject$imputations[[5]]$egoistic <- ifelse(impobject$imputations[[5]]$egoistic > 7, 7, impobject$imputations[[5]]$egoistic)
+
+
+# hed values
+impobject$imputations[[1]]$hedonic <- ifelse(impobject$imputations[[1]]$hedonic > 7, 7, impobject$imputations[[1]]$hedonic)
+
+impobject$imputations[[2]]$hedonic <- ifelse(impobject$imputations[[2]]$hedonic > 7, 7, impobject$imputations[[2]]$hedonic)
+
+impobject$imputations[[3]]$hedonic <- ifelse(impobject$imputations[[3]]$hedonic > 7, 7, impobject$imputations[[3]]$hedonic)
+
+impobject$imputations[[4]]$hedonic <- ifelse(impobject$imputations[[4]]$hedonic > 7, 7, impobject$imputations[[4]]$hedonic)
+
+impobject$imputations[[5]]$hedonic <- ifelse(impobject$imputations[[5]]$hedonic > 7, 7, impobject$imputations[[5]]$hedonic)
+
+
+# self-deceptive enhancement
+with(impobject, describe(self_deceptive_sdr))
+
+impobject$imputations[[4]]$self_deceptive_sdr <- ifelse(impobject$imputations[[4]]$self_deceptive_sdr < 1, 1, impobject$imputations[[4]]$self_deceptive_sdr)
+
+
+# impr manag
+with(impobject, describe(impress_manag_sdr))
+
+# Age
+describe(data_R_alt$Age)
+with(impobject, describe(Age))
+
+impobject$imputations[[1]]$Age <- ifelse(impobject$imputations[[1]]$Age < 18, 18, impobject$imputations[[1]]$Age)
+
+impobject$imputations[[2]]$Age <- ifelse(impobject$imputations[[2]]$Age < 18, 18, impobject$imputations[[2]]$Age)
+
+impobject$imputations[[3]]$Age <- ifelse(impobject$imputations[[3]]$Age < 18, 18, impobject$imputations[[3]]$Age)
+
+impobject$imputations[[4]]$Age <- ifelse(impobject$imputations[[4]]$Age < 18, 18, impobject$imputations[[4]]$Age)
+
+impobject$imputations[[5]]$Age <- ifelse(impobject$imputations[[5]]$Age < 18, 18, impobject$imputations[[5]]$Age)
+```
+
 
 ## Centering continuous predictors
 ```{r echo = FALSE}
@@ -986,6 +1077,194 @@ complete_data <- complete(mids_obj, "long")
 ```
 
 
+# Descriptive Statistics
+
+n per Condition
+```{r}
+data_R_alt %>%
+  group_by(framing_condition, norm_condition) %>%
+  summarise(n = n()) %>% 
+  knitr::kable(digits = 2)
+
+data_R_alt %>%
+  group_by(norm_condition) %>%
+  summarise(n = n())
+
+data_R_alt %>%
+  group_by(framing_condition) %>%
+  summarise(n = n())
+```
+
+
+Descriptives for variables with NO missing data
+
+Variables with NO missing data:
+
+* ingroup_identification
+* clothing_interest
+* consumer_intentions
+* framing_condition
+* norm_condition
+
+```{r}
+with(mids_obj, psych::describe(clothing_interest)) # describe
+with(mids_obj, sd(clothing_interest)) # sd
+with(mids_obj, mlv(clothing_interest, method = "mfv")) # mode
+with(mids_obj, tab1(clothing_interest, decimal = 2, sort.group = "decreasing", graph = FALSE)) # frequency table
+with(mids_obj, hist(clothing_interest, main = "Histogram of Clothing Interest", xlab = "Clothing Interest", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.5)) # histogram
+
+
+with(mids_obj, psych::describe(ingroup_identification))
+with(mids_obj, sd(ingroup_identification))
+with(mids_obj, mlv(ingroup_identification, method = "mfv"))
+with(mids_obj, tab1(ingroup_identification, sort.group = "decreasing", graph = FALSE)) 
+with(mids_obj, hist(ingroup_identification, main = "Histogram of Ingroup Identification", xlab = "Ingroup Identification", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.5))
+
+
+with(mids_obj, psych::describe(consumer_intentions))
+with(mids_obj, sd(consumer_intentions))
+with(mids_obj, mlv(consumer_intentions, method = "mfv"))
+with(mids_obj, tab1(consumer_intentions, decimal = 2, sort.group = "decreasing", graph = FALSE))
+with(mids_obj, hist(consumer_intentions, main = "Histogram of Consumer Intentions", xlab = "Consumer Intentions", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.5)) 
+```
+
+Descriptive Statistics for Consumer Intentions
+```{r}
+data_R_alt %>%
+  group_by(framing_condition, norm_condition) %>%
+  summarise(mean = mean(consumer_intentions),
+            sd = sd(consumer_intentions)) %>% 
+  knitr::kable(digits = 2)
+```
+
+
+Descriptives for variables with missing data:
+
+* Biospheric values
+* Altruistic values
+* Egoistic values
+* Hedonic values
+* Self-deceptive enhancement
+* Impression management
+* Age
+
+* Gender
+* Consumer behaviors
+
+Values
+```{r}
+data_R_alt %>%
+  dplyr::select(biospheric) %>%
+  describe()
+
+with(mids_obj, psych::describe(biospheric)) # describe
+with(mids_obj, mean(biospheric)) # mean
+with(mids_obj, sd(biospheric)) # sd
+with(mids_obj, skew(biospheric)) # skew
+with(mids_obj, mlv(biospheric, method = "mfv")) # mode
+with(mids_obj, tab1(biospheric, decimal = 2, sort.group = "decreasing", graph = FALSE)) # frequency table
+
+
+data_R_alt %>%
+  dplyr::select(altruistic) %>%
+  describe()
+
+with(mids_obj, psych::describe(altruistic))
+with(mids_obj, mean(altruistic)) # mean
+with(mids_obj, sd(altruistic)) # sd
+with(mids_obj, skew(altruistic)) # skew
+with(mids_obj, mlv(altruistic, method = "mfv"))
+with(mids_obj, tab1(altruistic, sort.group = "decreasing", graph = FALSE)) 
+
+data_R_alt %>%
+  dplyr::select(egoistic) %>%
+  describe()
+
+with(mids_obj, psych::describe(egoistic))
+with(mids_obj, mean(egoistic)) # mean
+with(mids_obj, sd(egoistic)) # sd
+with(mids_obj, skew(egoistic)) # skew
+with(mids_obj, mlv(egoistic, method = "mfv"))
+with(mids_obj, tab1(egoistic, decimal = 2, sort.group = "decreasing", graph = FALSE))
+
+
+data_R_alt %>%
+  dplyr::select(hedonic) %>%
+  describe()
+
+with(mids_obj, psych::describe(hedonic))
+with(mids_obj, mean(hedonic)) # mean
+with(mids_obj, sd(hedonic)) # sd
+with(mids_obj, skew(hedonic)) # skew
+with(mids_obj, mlv(hedonic, method = "mfv"))
+with(mids_obj, tab1(hedonic, decimal = 2, sort.group = "decreasing", graph = FALSE))
+
+
+# plotting multiple histograms
+imp5_data <- complete_data %>% 
+  filter(.imp == 5)
+
+par(mfrow = c(2,2))
+
+hist(imp5_data$biospheric, main = "Histogram of Biospheric Values", xlab = "Biospheric Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2) # histogram
+
+hist(imp5_data$altruistic, main = "Histogram of Altruistic Values", xlab = "Altruistic Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+hist(imp5_data$egoistic, main = "Histogram of Egoistic Values", xlab = "Egoistic Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+hist(imp5_data$hedonic, main = "Histogram of Hedonic Values", xlab = "Hedonic Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+```
+
+
+Socially desirable responding & age
+```{r}
+data_R_alt %>%
+  dplyr::select(self_deceptive_sdr) %>%
+  describe()
+
+with(mids_obj, psych::describe(self_deceptive_sdr))
+with(mids_obj, mean(self_deceptive_sdr)) # mean
+with(mids_obj, sd(self_deceptive_sdr)) # sd
+with(mids_obj, skew(self_deceptive_sdr)) # skew
+with(mids_obj, mlv(self_deceptive_sdr, method = "mfv"))
+with(mids_obj, tab1(self_deceptive_sdr, decimal = 2, sort.group = "decreasing", graph = FALSE))
+
+data_R_alt %>%
+  dplyr::select(impress_manag_sdr) %>%
+  describe()
+
+with(mids_obj, psych::describe(impress_manag_sdr))
+with(mids_obj, mean(impress_manag_sdr)) # mean
+with(mids_obj, sd(impress_manag_sdr)) # sd
+with(mids_obj, skew(impress_manag_sdr)) # skew
+with(mids_obj, mlv(impress_manag_sdr, method = "mfv"))
+with(mids_obj, tab1(impress_manag_sdr, decimal = 2, sort.group = "decreasing", graph = FALSE))
+
+data_R_alt %>%
+  dplyr::select(Age) %>%
+  describe()
+
+with(mids_obj, psych::describe(Age))
+with(mids_obj, mean(Age)) # mean
+with(mids_obj, sd(Age)) # sd
+with(mids_obj, skew(Age)) # skew
+with(mids_obj, mlv(Age, method = "mfv"))
+with(mids_obj, tab1(Age, decimal = 2, sort.group = "decreasing", graph = FALSE))
+
+
+par(mfrow = c(2,2))
+
+hist(imp5_data$self_deceptive_sdr, main = "Histogram of Self-deceptive Enhancement", xlab = "Self-deceptive Enhancement", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+hist(imp5_data$impress_manag_sdr, main = "Histogram of Impression Management", xlab = "Impression Management", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+hist(imp5_data$Age, main = "Histogram of Age", xlab = "Age", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+```
+
+
+
 
 # Regression Analysis (DV = Consumer Intentions)
 
@@ -1006,7 +1285,7 @@ Using `mice` package:
 ```{r echo = FALSE}
 pool_summ <- summary(pool(mod_mice))
 pool_summ %>%
-  knitr::kable(digits = 5)
+  knitr::kable(digits = 3)
 ```
 
 APA style table for regression summary
@@ -1032,7 +1311,7 @@ mod_mice_std <- with(mids_obj, lm(scale(consumer_intentions) ~ framing_condition
 pool_summ_std <- summary(pool(mod_mice_std))
 
 pool_summ_std %>%
-  knitr::kable(digits = 5)
+  knitr::kable(digits = 3)
 ```
 
 APA style table for regression summary
@@ -1044,36 +1323,52 @@ apa_table(pool_summ_std,
 
 
 
+## Model Comparisons for Testing Interactions
+
+biospheric
+```{r}
+mod_bio <- with(mids_obj, lm(consumer_intentions ~ framing_condition + norm_condition + altruistic_center + egoistic_center + hedonic_center + ingroup_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center))
+```
+
+Full model results
+```{r include = FALSE}
+mod_bio
+```
+
+
+```{r}
+anova(mod_mice, mod_bio)
+D2(mod_mice, mod_bio)
+```
+
+
+
+
+
 ## Pooled Anova Results
 
 
 Using Anova()
-```{r echo = FALSE, warning = FALSE}
-anova_mod2 <- with(mids_obj, Anova(lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center), type = "III"))
+```{r include = FALSE, echo = FALSE, warning = FALSE}
+#anova_mod2 <- with(mids_obj, Anova(lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center), type = "III"))
 ```
 
 ```{r}
-anova_mod2
+#anova_mod2
 ```
-
 
 
 
 Using mi.anova()
+
+- Uses D2 test
 ```{r}
-anova_mod3 <- mi.anova(mi.res = mids_obj, formula = "consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center", type = 3)
+anova_mod3 <- mi.anova(mi.res = mids_obj, formula = "consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center")
 ```
 
 ```{r}
 anova_mod3 %>%
   knitr::kable(digits = c(2, 2, 2, 2, 3, 3, 3))
-```
-
-```{r}
-MS_btw <- (67.71/1)
-MS_wth <- (1185.172/1038)
-F <- MS_btw/MS_wth
-F # 59.459
 ```
 
 
@@ -1426,6 +1721,18 @@ text_settings <- theme(text = element_text(size = 20)) +
   theme(axis.ticks = element_blank())
 ```
 
+## Estimated Marginal Means
+```{r}
+cell_emmeans <- emmeans(mod_mice, ~ norm_condition*framing_condition)
+cell_emmeans
+
+frame_emmeans <- emmeans(mod_mice, ~ framing_condition)
+frame_emmeans
+
+norm_emmeans <- emmeans(mod_mice, ~ norm_condition)
+norm_emmeans
+```
+
 
 ### Framing Condition
 
@@ -1667,7 +1974,7 @@ bio_norm_contr %>%
 Confidence interval
 ```{r}
 confint(bio_norm_contr) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 
@@ -1704,7 +2011,7 @@ bio_norm_slopes$contrasts %>%
 Confidence interval
 ```{r}
 confint(bio_norm_slopes$contrasts) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 The relationship between biospheric values and consumer intentions was significantly stronger in the convention norm condition (b = 0.61) compared to the moral norm condition (b = 0.20), t(1039) = -2.69, p = .007, and in the convention norm condition compared to the social norm condition (b = 0.26), t(1039) = 2.49, p = .013, and in the convention norm condition compared to the descriptive norm condition (b = 0.32), t(1039) = -1.98, p = .048.
@@ -1722,7 +2029,7 @@ bio_frame_slopes %>%
 Confidence interval
 ```{r}
 confint(bio_frame_slopes) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 ```{r}
@@ -1752,7 +2059,7 @@ bio_frame_trends$contrasts %>%
 Confidence interval
 ```{r}
 confint(bio_frame_trends$contrasts) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 No, the relationship between biospheric values and consumer intentions was similarly strong across all framing conditions.
@@ -1772,7 +2079,7 @@ bio_frame_norm_trends$contrasts %>%
 Confidence interval
 ```{r}
 confint(bio_frame_norm_trends$contrasts) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 
@@ -1837,7 +2144,7 @@ alt_norm_trends$contrasts %>%
 Confidence interval
 ```{r}
 confint(alt_norm_trends$contrasts) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 The relationship between altruistic values and consumer intentions was significantly stronger in the moral norm condition (b = 0.36) compared to the descriptive norm condition (b = -0.10), t(1039) = -2.46, p = .014.
@@ -1879,7 +2186,7 @@ alt_frame_trends$contrasts %>%
 Confidence interval
 ```{r}
 confint(alt_frame_trends$contrasts) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 No, the difference between any two slopes was not significant.
@@ -1951,7 +2258,7 @@ ego_norm_trends$contrasts %>%
 Confidence interval
 ```{r}
 confint(ego_norm_trends$contrasts) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 No, the difference between any two slopes was not significant.
@@ -1992,7 +2299,7 @@ ego_frame_trends$contrasts %>%
 Confidence interval
 ```{r}
 confint(ego_frame_trends$contrasts) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 No, the difference between any two slopes was not significant.
@@ -2063,7 +2370,7 @@ hed_norm_trends$contrasts %>%
 Confidence interval
 ```{r}
 confint(hed_norm_trends$contrasts) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 There was a significant difference in the relationship between hedonic values and consumer intentions between the convention norm condition (b = 0.12) and the moral norm condition (b = -0.30), t(1039) = 2.66, p = .008.
@@ -2103,7 +2410,7 @@ hed_frame_trends$contrasts %>%
 Confidence interval
 ```{r}
 confint(hed_frame_trends$contrasts) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 No, there was no significant difference between any two pairs of slopes.
@@ -2173,7 +2480,7 @@ ing_norm_trends$contrasts %>%
 Confidence interval
 ```{r}
 confint(ing_norm_trends$contrasts) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 No, there was no significant difference between any two pairs of slopes.
@@ -2214,7 +2521,7 @@ ing_frame_trends$contrasts %>%
 Confidence interval
 ```{r}
 confint(ing_frame_trends$contrasts) %>%
-  knitr:kable(digits = 2)
+  knitr::kable(digits = 2)
 ```
 
 No, there was no significant difference between any two pairs of slopes.
