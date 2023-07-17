@@ -1,0 +1,2152 @@
+---
+title: "Individual Imputed Models"
+output:
+  word_document:
+    toc: yes
+    toc_depth: '3'
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+date: "2023-03-29"
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r clear environment, echo = FALSE}
+rm(list = ls())
+```
+
+
+```{r libraries, message = FALSE, warning = FALSE, include = FALSE}
+library(Rmisc)
+library(Hmisc)
+library(rio)
+library(tidyverse)
+library(psych)
+library(gtools) # rbinding data frames
+library(corrplot)
+library(jtools) # for pretty printing tables
+library(sjPlot) # pretty printing tables
+library(sjmisc) # pretty printing
+library(mice) # handling missing values
+library(naniar) # visualizaing missingness & MCAR test
+library(miceadds) # for mi.anova
+library(emmeans) # simple effects analyses
+library(broom)     # for extracting residuals and outlier indices
+library(olsrr)     # for creating outlier plots
+library(smcfcs) # for multiple imputation with interactions
+library(mitools) # for pooling MI results
+library(marginaleffects) # for plotting marginal means 
+library(installr)
+library(epiDisplay) # for frequency tables
+library(papaja) # for APA printing
+library(car) # for Anova function (type III ss)
+library(lsr) # for etaSquared
+library(modeest) # for mode (using mlv function)
+library(cowplot) # for plot_grid to display multiple plots
+library(pwr)
+library(pwr2)
+
+
+options(max.print = 100000) # max rows to print in output
+options(scipen = 1000) # turn off sci notation
+```
+
+# Data Import & Cleaning
+
+## Import data
+```{r import data}
+raw_psych_hum_subj <- import("data/raw/raw_psych_hum_subj.csv")
+raw_mktg_hum_subj <- import("data/raw/raw_mktg_hum_subj.csv")
+raw_gen_uo_pop <- import("data/raw/raw_gen_uo_pop.csv")
+pre_fall22 <- import("data/prescreen/dittersdorf_matches_f22.csv")
+pre_winter23 <- import("data/prescreen/dittersdorf_matches_w23.csv")
+pre_spring23 <- import("data/prescreen/dittersdorf_matches_s23.csv")
+participant_list <- import("data/prescreen/dittersdorf_participants.csv")
+```
+
+
+
+Fix age before converting variable types
+```{r}
+table(raw_psych_hum_subj$Age) # 18 years old = 18
+table(raw_mktg_hum_subj$Age) # 1999 = 24
+table(raw_gen_uo_pop$Age)
+
+raw_psych_hum_subj$Age[raw_psych_hum_subj$Age == "18 years old"] <- 18
+raw_mktg_hum_subj$Age[raw_mktg_hum_subj$Age == 1999] <- 24
+
+table(raw_psych_hum_subj$Age) # 18 years old = 18
+table(raw_mktg_hum_subj$Age) # 1999 = 24
+```
+
+
+
+## Combine dataframes 
+```{r update var types, warning = FALSE}
+raw_psych_hum_subj <- raw_psych_hum_subj %>%
+  mutate(Age = as.integer(Age),
+         Gender = as.factor(Gender),
+         framing_condition_DO = as.factor(framing_condition_DO),
+         norm_condition_DO = as.factor(norm_condition_DO),
+         consumer_behaviors = as.factor(consumer_behaviors),
+         skepticism = as.factor(skepticism),
+         id = as.factor(id),
+         source = strrep("psych_hsp", times = 1))
+
+levels(raw_psych_hum_subj$framing_condition_DO)
+
+raw_mktg_hum_subj <- raw_mktg_hum_subj %>%
+  mutate(Age = as.integer(Age),
+         Gender = as.factor(Gender),
+         Gender_5_TEXT = as.character(Gender_5_TEXT),
+         Class_Lvl_7_TEXT = as.character(Class_Lvl_7_TEXT),
+         Pol_Ornt_8_TEXT = as.character(Pol_Ornt_8_TEXT),
+         Ethnicity_8_TEXT = as.character(Ethnicity_8_TEXT),
+         skept_open = as.character(skept_open),
+         skepticism = as.factor(skepticism),
+         id = as.factor(id),
+         framing_condition_DO = as.factor(framing_condition_DO),
+         norm_condition_DO = as.factor(norm_condition_DO),
+         consumer_behaviors = as.factor(consumer_behaviors),
+         source = strrep("mktg_hsp", times = 1))
+
+raw_gen_uo_pop <- raw_gen_uo_pop %>%
+  mutate(Gender = as.factor(Gender),
+         Gender_5_TEXT = as.character(Gender_5_TEXT),
+         Class_Lvl_7_TEXT = as.character(Class_Lvl_7_TEXT),
+         Pol_Ornt_8_TEXT = as.character(Pol_Ornt_8_TEXT),
+         skept_open = as.character(skept_open),
+         skepticism = as.factor(skepticism),
+         id = as.factor(id),
+         framing_condition_DO = as.factor(framing_condition_DO),
+         norm_condition_DO = as.factor(norm_condition_DO),
+         consumer_behaviors = as.factor(consumer_behaviors),
+         source = strrep("gen_UO", times = 1))
+```
+
+
+Specify unique variables to combine prescreen data sets
+```{r prep prescreen dfs}
+# Create unique full_name variable
+pre_fall22$full_name <- paste(pre_fall22$first_name, pre_fall22$last_name, sep="_")
+
+pre_winter23$full_name <- paste(pre_winter23$first_name, pre_winter23$last_name, sep="_")
+
+pre_spring23$full_name <- paste(pre_spring23$first_name, pre_spring23$last_name, sep="_")
+
+participant_list$full_name <- paste(participant_list$first_name, participant_list$last_name, sep="_")
+
+# Create column indicating which data set rows came from
+
+pre_fall22 <- pre_fall22 %>%
+  mutate(term = "fall22")
+
+pre_winter23 <- pre_winter23 %>%
+  mutate(term = "winter23")
+
+pre_spring23 <- pre_spring23 %>%
+  mutate(term = "spring23")
+```
+
+
+Combine prescreen data
+```{r combine prescreen dfs}
+combine1 <- smartbind(pre_fall22, pre_winter23)
+combined_prescreen <- smartbind(combine1, pre_spring23)
+
+# nrow(pre_fall22) + nrow(pre_winter23) + nrow(pre_spring23) # n = 1167
+
+combined_prescreen_unique <- combined_prescreen[!duplicated(combined_prescreen$full_name), ] # keeps first row (fall22)
+```
+
+Subset key variables
+```{r subset key vars}
+combined_prescreen_key <- combined_prescreen_unique %>%
+  dplyr::select(full_name, term, respecting:gratification, honest:gossip)
+
+participant_list_key <- participant_list %>%
+  dplyr::select(full_name, survey_id)
+```
+
+Merge with participant list
+```{r merge participant list}
+merged_prescreen <- merge(combined_prescreen_key, participant_list_key, by = "full_name")
+```
+
+
+Rename SDR items to match
+```{r clean merged prescreen, warning = FALSE, include = FALSE}
+merged_prescreen <- merged_prescreen %>%
+  rename("lose_out" = "lose-out", 
+         "cover_up" = "cover-up",
+         "get_even" = "get-even",
+         "behind_back" = "behind-back",
+         "private_talk" = "private-talk",
+         "take_things" = "take-things",
+         "id" = "survey_id")
+```
+
+Convert variable types
+```{r}
+merged_prescreen <- merged_prescreen %>%
+  mutate(respecting = as.integer(respecting),
+         unity = as.integer(unity),
+         protecting = as.integer(protecting),
+         preventing = as.integer(preventing),
+         equality = as.integer(equality),
+         peace = as.integer(peace),
+         justice = as.integer(justice),
+         helpful = as.integer(helpful),
+         power = as.integer(power),
+         wealth = as.integer(wealth),
+         authority = as.integer(authority),
+         influential = as.integer(influential),
+         ambition = as.integer(ambition),
+         pleasures = as.integer(pleasures),
+         enjoying = as.integer(enjoying),
+         gratification = as.integer(gratification),
+         honest = as.integer(honest),
+         like = as.integer(like),
+         disturbing = as.integer(disturbing),
+         regret = as.integer(regret),
+         lose_out = as.integer(lose_out),
+         rational = as.integer(rational),
+         confident = as.integer(confident),
+         lover = as.integer(lover),
+         lies = as.integer(lies),
+         cover_up = as.integer(cover_up),
+         advantage = as.integer(advantage),
+         get_even = as.integer(get_even),
+         behind_back = as.integer(behind_back),
+         private_talk = as.integer(private_talk),
+         take_things = as.integer(take_things),
+         gossip = as.integer(gossip),
+         id = as.factor(id))
+```
+
+
+Rename values & socially desirable items in prescreen data to match names in main data:
+```{r rename prescreen vars, include = FALSE}
+merged_prescreen <- merged_prescreen %>%
+  rename("values_1" = "respecting",
+         "values_2" = "unity",
+         "values_3" = "protecting",
+         "values_4" = "preventing",
+         "values_5" = "equality",
+         "values_6" = "peace",
+         "values_7" = "justice",
+         "values_8" = "helpful",
+         "values_9" = "power",
+         "values_10" = "wealth",
+         "values_11" = "authority",
+         "values_12" = "influential",
+         "values_13" = "ambition",
+         "values_14" = "pleasures",
+         "values_15" = "enjoying",
+         "values_16" = "gratification",
+         "socially_desirable_1" = "honest",
+         "socially_desirable_2" = "like",
+         "socially_desirable_3" = "disturbing",
+         "socially_desirable_4" = "regret",
+         "socially_desirable_5" = "lose_out",
+         "socially_desirable_6" = "rational",
+         "socially_desirable_7" = "confident",
+         "socially_desirable_8" = "lover",
+         "socially_desirable_9" = "lies",
+         "socially_desirable_10" = "cover_up",
+         "socially_desirable_11" = "advantage",
+         "socially_desirable_12" = "get_even",
+         "socially_desirable_13" = "behind_back",
+         "socially_desirable_14" = "private_talk",
+         "socially_desirable_15" = "take_things",
+         "socially_desirable_16" = "gossip")
+```
+
+
+Combine all data
+
+- First, combine Psych Hum Subj data with Prescreen data based on `id`
+- Second, add Mktg Hum Subj data
+- Third, add gen UO Pop data
+```{r combine all data}
+combine1 <- merge(raw_psych_hum_subj, merged_prescreen, by = "id")
+combine2 <- smartbind(combine1, raw_mktg_hum_subj)
+combine3 <- smartbind(combine2, raw_gen_uo_pop)
+```
+
+
+## Remove duplicate cases
+
+Identify duplicate cases
+```{r id duplicate cases, results = 'hide'}
+# first, add unique row #s
+combine3 <- combine3 %>%
+  mutate(row = 1:nrow(combine3))
+
+combine3[duplicated(combine3$id),] # Only rows 1 through 858 have unique id #s
+
+# write.csv(combine3, "combined_data.csv")
+```
+
+Row IDs to remove:
+
+* 13 (participant's second time completing study)
+* 134 (participant didn't complete study first time)
+* 145 (participant didn't complete study first time)
+* 308 (participant's second time completing study)
+* 672 (participant's second time completing study)
+* 743 (participant didn't complete study first time)
+* 790 (participant didn't complete study first time)
+* 800 (participant didn't complete study first time)
+
+Remove duplicate rows after resolving:
+```{r remove duplicate cases}
+combine3 <- combine3 %>%
+  filter(!row %in% c(13, 134, 145, 308, 672, 743, 790, 800))
+```
+
+
+## Remove rows of all NAs
+
+Identify completely missing rows:
+```{r id all NA rows, results = 'hide'}
+key_vars <- combine3 %>%
+  dplyr::select(row, big_2_1:big_2_65, consumer_intentions_1:consumer_intentions_9, consumer_behaviors, clothing_interest_1:clothing_interest_20, ingroup_ident_1:ingroup_ident_14, values_1:values_16, socially_desirable_1:socially_desirable_16, source)
+
+ncol(key_vars) # number of columns - the row # & source column = 141
+
+all_NA_rows <- key_vars[rowSums(is.na(key_vars)) == 141,] # identify rows with 141 NAs (all missing values), row numbers are preserved
+
+all_NA_rows
+```
+
+Removing rows of fully missing data
+```{r remove all NA rows}
+data <- combine3 %>%
+  dplyr::filter(!row %in% c(859, 860, 900, 926, 927, 941, 1139, 1141, 1142, 1143, 1144, 1146, 1149, 1150, 1152)) %>% # remove rows containing all NAs
+  dplyr::select(-StartDate, -EndDate, -Status, -Progress, -"Duration (in seconds)", -Finished, -RecordedDate, -ResponseId, -DistributionChannel, -UserLanguage, -big_2_DO, -consumer_intentions_DO, -consumer_behaviors_DO, -clothing_interest_DO, -ingroup_ident_DO, -full_name, -code, -socially_desirable_DO, -values_DO, -email_giftcard, -term) # removing variables not in analysis
+```
+
+
+## Number per source
+```{r}
+table(data$source)
+```
+
+* 850 = psych human subjects pool
+* 276 = mktg human subjects pool
+* 7 = general UO pop
+
+
+Rename variables
+```{r rename vars}
+data <- data %>%
+  rename("framing_condition" = "framing_condition_DO", 
+         "norm_condition" = "norm_condition_DO")
+```
+
+Drop unused levels
+```{r include = FALSE}
+levels(data$framing_condition)
+levels(data$norm_condition)
+
+data$framing_condition <- droplevels(data$framing_condition)
+data$norm_condition <- droplevels(data$norm_condition)
+
+levels(data$framing_condition)
+levels(data$norm_condition)
+```
+
+
+Re-order levels of norm condition
+```{r}
+data$norm_condition <- factor(data$norm_condition, levels = c("control_norm", "descriptive_norm", "convention_norm", "social_norm", "moral_norm"))
+```
+
+
+## Inspect final data 
+```{r inspect final df, results = 'hide'}
+str(data, list.len = ncol(data))
+
+# write.csv(data, "final_data.csv")
+```
+
+
+# Aggregate Variables 
+
+## Personality
+
+### Reverse-code
+
+```{r reverse personality items}
+data_R <- data %>%
+  mutate(across(c(big_2_11,
+                  big_2_16,
+                  big_2_26,
+                  big_2_31,
+                  big_2_36,
+                  big_2_51,
+                  big_2_12,
+                  big_2_17,
+                  big_2_22,
+                  big_2_37,
+                  big_2_42,
+                  big_2_47,
+                  big_2_3,
+                  big_2_8,
+                  big_2_23,
+                  big_2_28,
+                  big_2_48,
+                  big_2_58,
+                  big_2_4,
+                  big_2_9,
+                  big_2_24,
+                  big_2_29,
+                  big_2_44,
+                  big_2_49,
+                  big_2_5,
+                  big_2_25,
+                  big_2_30,
+                  big_2_45,
+                  big_2_50,
+                  big_2_55,
+                  big_2_63), ~6 - .)) # replace '6' with the max possible value plus 1 for any particular scale
+```
+
+### Average items
+
+```{r aggregate personality}
+data_R$extraversion <- data_R %>%
+  dplyr::select(big_2_1, big_2_6, big_2_11, big_2_16, big_2_21, big_2_26, big_2_31, big_2_36, big_2_41, big_2_46, big_2_51, big_2_56) %>%
+  rowMeans(na.rm = TRUE) 
+
+
+data_R$conscientiousness <- data_R %>%
+  dplyr::select(big_2_3, big_2_8, big_2_13, big_2_18, big_2_23, big_2_28, big_2_33, big_2_38, big_2_43, big_2_48, big_2_53, big_2_58) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$agreeableness <- data_R %>%
+  dplyr::select(big_2_2, big_2_7, big_2_12, big_2_17, big_2_22, big_2_27, big_2_32, big_2_37, big_2_42, big_2_47, big_2_52, big_2_57) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$neuroticism <- data_R %>%
+  dplyr::select(big_2_4, big_2_9, big_2_14, big_2_19, big_2_24, big_2_29, big_2_34, big_2_39, big_2_44, big_2_49, big_2_54, big_2_59) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$openness <- data_R %>%
+  dplyr::select(big_2_5, big_2_10, big_2_15, big_2_20, big_2_25, big_2_30, big_2_35, big_2_40, big_2_45, big_2_50, big_2_55, big_2_60) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$honesty <- data_R %>%
+  dplyr::select(big_2_61, big_2_62, big_2_63, big_2_64, big_2_65) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Visually inspect
+```{r warning = FALSE}
+data_R %>%
+  dplyr::select(extraversion, agreeableness, conscientiousness, openness, neuroticism, honesty) %>%
+  hist()
+```
+
+
+## Clothing Interest
+
+### Reverse-code
+
+```{r reverse clothing items}
+data_R <- data_R %>%
+  mutate(across(c(clothing_interest_3,
+                  clothing_interest_5,
+                  clothing_interest_7,
+                  clothing_interest_9,
+                  clothing_interest_12,
+                  clothing_interest_14,
+                  clothing_interest_15,
+                  clothing_interest_16,
+                  clothing_interest_18,
+                  clothing_interest_20), ~6 - .)) # replace '#' with the max possible value plus 1 for any particular scale
+```
+
+
+### Average items
+```{r aggregate clothing interest}
+data_R$clothing_interest <- data_R %>%
+  dplyr::select(clothing_interest_1:clothing_interest_20) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+
+### Visually Inspect
+```{r}
+data_R %>%
+  dplyr::select(clothing_interest) %>%
+  hist()
+```
+
+
+
+## In-group Identification
+
+### Reverse-code
+
+No items need to be reverse-coded.
+
+### Average items
+```{r aggegate ingroup ident}
+data_R$ingroup_identification <- data_R %>%
+  dplyr::select(ingroup_ident_1:ingroup_ident_14) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Visually Inspect
+
+```{r}
+data_R %>%
+  dplyr::select(ingroup_identification) %>%
+  hist()
+```
+
+## Values
+
+### Reverse-code
+
+No items need to be reverse-coded.
+
+### Recoding scale options
+
+Recoding values:
+
+* -3 = 1
+* -2 = 2
+* -1 = 3
+* 0 = 4
+* +1 = 5
+* +2 = 6
+* +3 = 7
+
+```{r recode values}
+table(data_R$values_1)
+
+data_R$values_1_rec <- dplyr::recode(data_R$values_1, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+
+table(data_R$values_1_rec)
+
+data_R$values_2_rec <- dplyr::recode(data_R$values_2, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_3_rec <- dplyr::recode(data_R$values_3, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_4_rec <- dplyr::recode(data_R$values_4, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_5_rec <- dplyr::recode(data_R$values_5, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_6_rec <- dplyr::recode(data_R$values_6, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_7_rec <- dplyr::recode(data_R$values_7, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_8_rec <- dplyr::recode(data_R$values_8, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_9_rec <- dplyr::recode(data_R$values_9, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_10_rec <- dplyr::recode(data_R$values_10, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_11_rec <- dplyr::recode(data_R$values_11, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_12_rec <- dplyr::recode(data_R$values_12, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_13_rec <- dplyr::recode(data_R$values_13, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_14_rec <- dplyr::recode(data_R$values_14, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_15_rec <- dplyr::recode(data_R$values_15, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_16_rec <- dplyr::recode(data_R$values_16, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+
+table(data_R$values_16)
+table(data_R$values_16_rec)
+```
+
+
+### Average items
+```{r aggregate values}
+data_R$biospheric <- data_R %>%
+  dplyr::select(values_1_rec:values_4_rec) %>%
+  rowMeans(na.rm = TRUE)
+
+data_R$altruistic <- data_R %>%
+  dplyr::select(values_5_rec:values_8_rec) %>%
+  rowMeans(na.rm = TRUE)
+
+data_R$egoistic <- data_R %>%
+  dplyr::select(values_9_rec:values_13_rec) %>%
+  rowMeans(na.rm = TRUE)
+
+data_R$hedonic <- data_R %>%
+  dplyr::select(values_14_rec:values_16_rec) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+
+### Visually inspect
+```{r}
+values_df <- data_R %>%
+  dplyr::select(biospheric, altruistic, egoistic, hedonic)
+
+values_df %>%
+  hist()
+```
+
+### Frequency tables
+```{r}
+# Biospheric values
+tab1(values_df$biospheric, sort.group = "descending", cum.percent = TRUE, missing = FALSE, horiz = TRUE)
+
+# Altruistic values
+tab1(values_df$altruistic, sort.group = "descending", cum.percent = TRUE, missing = FALSE, horiz = TRUE)
+
+# Egoistic values
+tab1(values_df$egoistic, sort.group = "descending", cum.percent = TRUE, missing = FALSE, horiz = TRUE)
+
+# Hedonic values
+tab1(values_df$hedonic, sort.group = "descending", cum.percent = TRUE, missing = FALSE, horiz = TRUE)
+```
+
+
+
+
+## Socially Desirable Responding
+
+### Reverse-code
+```{r reverse code socially desirable items}
+data_R <- data_R %>%
+  mutate(across(c(socially_desirable_1,
+                  socially_desirable_3,
+                  socially_desirable_5,
+                  socially_desirable_8,
+                  socially_desirable_9,
+                  socially_desirable_11,
+                  socially_desirable_12,
+                  socially_desirable_13), ~8 - .)) # replace '#' with the max possible value plus 1 for any particular scale
+```
+
+### Average items
+```{r aggregate socially desirable}
+data_R$self_deceptive_sdr <- data_R %>%
+  dplyr::select(socially_desirable_1:socially_desirable_8) %>%
+  rowMeans(na.rm = TRUE)
+  
+data_R$impress_manag_sdr <- data_R %>%
+  dplyr::select(socially_desirable_9:socially_desirable_16) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Visually inspect
+
+```{r warning = FALSE}
+data_R %>%
+  dplyr::select(self_deceptive_sdr, impress_manag_sdr) %>%
+  hist()
+```
+
+
+## Consumer Intentions
+
+### Reverse-code
+
+Higher scores mean better consumer intentions (intentions to *reduce* future consumption):
+```{r reverse code consumer intentions}
+data_R <- data_R %>%
+  mutate(across(c(consumer_intentions_2,
+                  consumer_intentions_4,
+                  consumer_intentions_7,
+                  consumer_intentions_9), ~8 - .)) # replace '#' with the max possible value plus 1 for any particular scale
+```
+
+### Average items
+
+```{r aggregate consumer intentions}
+data_R$consumer_intentions <- data_R %>%
+  dplyr::select(consumer_intentions_1:consumer_intentions_9) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Visually inspect
+
+```{r warning = FALSE}
+data_R %>%
+  dplyr::select(consumer_intentions) %>%
+  hist()
+```
+
+
+
+
+# Contrast Coding 
+
+Subset variables
+```{r echo = FALSE}
+data_R_alt <- data_R %>%
+  dplyr::select(hedonic, egoistic, altruistic, biospheric, ingroup_identification, Age, clothing_interest, self_deceptive_sdr, impress_manag_sdr, consumer_intentions, consumer_behaviors, Gender, framing_condition, norm_condition)
+```
+
+Contrast Coding using ifelse() approach:
+```{r alt coding}
+# Framing
+data_R_alt$FramingCode1 <- ifelse(data_R_alt$framing_condition == "control_framing", -1/2, ifelse(data_R_alt$framing_condition == "self_enh_framing", 1/2, 0))
+
+data_R_alt$FramingCode2 <- ifelse(data_R_alt$framing_condition == "pro_env_framing", 2/3, -1/3)
+
+
+# Norm
+data_R_alt$NormCode1 <- ifelse(data_R_alt$norm_condition == "moral_norm", 4, -1)
+
+data_R_alt$NormCode2 <- ifelse(data_R_alt$norm_condition == "social_norm", 3, ifelse(data_R_alt$norm_condition == "moral_norm", 0, -1))
+
+data_R_alt$NormCode3 <- ifelse(data_R_alt$norm_condition == "convention_norm", 2, ifelse(data_R_alt$norm_condition == "moral_norm", 0, ifelse(data_R_alt$norm_condition == "social_norm", 0, -1)))
+data_R_alt$NormCode4 <- ifelse(data_R_alt$norm_condition == "descriptive_norm", 1, ifelse(data_R_alt$norm_condition == "control_norm", -1, 0))
+
+
+## Adding contrast codes to Framing & Norm Condition
+# Framing
+FrameCode1 <- c(-1/2, 0, 1/2) # control vs self-enhancing
+FrameCode2 <- c(-1/3, 2/3, -1/3) # arbitrary code
+
+contrasts(data_R_alt$framing_condition) <- cbind(FrameCode1, FrameCode2)
+contrasts(data_R_alt$framing_condition)
+
+# Norm
+contrasts(data_R_alt$norm_condition) <- contr.helmert(5)
+contrasts(data_R_alt$norm_condition) # control vs DN
+
+# Gender
+levels(data_R_alt$Gender) <- c("Woman", "Man", "Non-binary", "I prefer not to identify", "Other")
+
+data_R_alt$Gender[data_R_alt$Gender == "Non-binary"] <- NA
+data_R_alt$Gender[data_R_alt$Gender == "I prefer not to identify"] <- NA
+data_R_alt$Gender[data_R_alt$Gender == "Other"] <- NA
+
+data_R_alt$Gender <- droplevels(data_R_alt$Gender)
+
+
+contrasts(data_R_alt$Gender) <- c(1, 0)
+levels(data_R_alt$Gender)
+```
+
+
+# Multiple Imputation 
+
+## Examine Missingness
+
+```{r}
+data_R_alt %>%
+  dplyr::select(framing_condition, norm_condition, hedonic, egoistic, altruistic, biospheric, ingroup_identification, self_deceptive_sdr, impress_manag_sdr, consumer_intentions, consumer_behaviors, Age, Gender, clothing_interest) %>%
+  vis_miss()
+
+n_missing <- data_R_alt %>%
+  dplyr::select(framing_condition, norm_condition, hedonic, egoistic, altruistic, biospheric, ingroup_identification, self_deceptive_sdr, impress_manag_sdr, consumer_intentions, consumer_behaviors, Age, Gender, clothing_interest) %>%
+  lapply(function(x) sum(is.na(x)))
+
+n_missing
+
+# percent missing
+lapply(n_missing, function(x) (x/nrow(data_R_alt))*100)
+```
+
+Variables with NO missing data:
+
+* ingroup_identification
+* clothing_interest
+* consumer_intentions
+* framing_condition
+* norm_condition
+
+
+
+## Adding interaction terms
+```{r include = FALSE}
+data_R_alt <- data_R_alt %>%
+  mutate(framing1Xbiospheric = (FramingCode1)*(biospheric),
+         framing2Xbiospheric = (FramingCode2)*(biospheric),
+         norm1Xbiospheric = (NormCode1)*(biospheric),
+         norm2Xbiospheric = (NormCode2)*(biospheric),
+         norm3Xbiospheric = (NormCode3)*(biospheric),
+         norm4Xbiospheric = (NormCode4)*(biospheric),
+         framing1Xnorm1Xbiospheric = (FramingCode1)*(NormCode1)*(biospheric),
+         framing1Xnorm2Xbiospheric = (FramingCode1)*(NormCode2)*(biospheric),
+         framing1Xnorm3Xbiospheric = (FramingCode1)*(NormCode3)*(biospheric),
+         framing1Xnorm4Xbiospheric = (FramingCode1)*(NormCode4)*(biospheric),
+         framing2Xnorm1Xbiospheric = (FramingCode2)*(NormCode1)*(biospheric),
+         framing2Xnorm2Xbiospheric = (FramingCode2)*(NormCode2)*(biospheric),
+         framing2Xnorm3Xbiospheric = (FramingCode2)*(NormCode3)*(biospheric),
+         framing2Xnorm4Xbiospheric = (FramingCode2)*(NormCode4)*(biospheric),
+         
+         framing1Xaltruistic = (FramingCode1)*(altruistic),
+         framing2Xaltruistic = (FramingCode2)*(altruistic),
+         norm1Xaltruistic = (NormCode1)*(altruistic),
+         norm2Xaltruistic = (NormCode2)*(altruistic),
+         norm3Xaltruistic = (NormCode3)*(altruistic),
+         norm4Xaltruistic = (NormCode4)*(altruistic),
+         framing1Xnorm1Xaltruistic = (FramingCode1)*(NormCode1)*(altruistic),
+         framing1Xnorm2Xaltruistic = (FramingCode1)*(NormCode2)*(altruistic),
+         framing1Xnorm3Xaltruistic = (FramingCode1)*(NormCode3)*(altruistic),
+         framing1Xnorm4Xaltruistic = (FramingCode1)*(NormCode4)*(altruistic),
+         framing2Xnorm1Xaltruistic = (FramingCode2)*(NormCode1)*(altruistic),
+         framing2Xnorm2Xaltruistic = (FramingCode2)*(NormCode2)*(altruistic),
+         framing2Xnorm3Xaltruistic = (FramingCode2)*(NormCode3)*(altruistic),
+         framing2Xnorm4Xaltruistic = (FramingCode2)*(NormCode4)*(altruistic),
+         
+         framing1Xegoistic = (FramingCode1)*(egoistic),
+         framing2Xegoistic = (FramingCode2)*(egoistic),
+         norm1Xegoistic = (NormCode1)*(egoistic),
+         norm2Xegoistic = (NormCode2)*(egoistic),
+         norm3Xegoistic = (NormCode3)*(egoistic),
+         norm4Xegoistic = (NormCode4)*(egoistic),
+         framing1Xnorm1Xegoistic = (FramingCode1)*(NormCode1)*(egoistic),
+         framing1Xnorm2Xegoistic = (FramingCode1)*(NormCode2)*(egoistic),
+         framing1Xnorm3Xegoistic = (FramingCode1)*(NormCode3)*(egoistic),
+         framing1Xnorm4Xegoistic = (FramingCode1)*(NormCode4)*(egoistic),
+         framing2Xnorm1Xegoistic = (FramingCode2)*(NormCode1)*(egoistic),
+         framing2Xnorm2Xegoistic = (FramingCode2)*(NormCode2)*(egoistic),
+         framing2Xnorm3Xegoistic = (FramingCode2)*(NormCode3)*(egoistic),
+         framing2Xnorm4Xegoistic = (FramingCode2)*(NormCode4)*(egoistic),
+         
+         framing1Xhedonic = (FramingCode1)*(hedonic),
+         framing2Xhedonic = (FramingCode2)*(hedonic),
+         norm1Xhedonic = (NormCode1)*(hedonic),
+         norm2Xhedonic = (NormCode2)*(hedonic),
+         norm3Xhedonic = (NormCode3)*(hedonic),
+         norm4Xhedonic = (NormCode4)*(hedonic),
+         framing1Xnorm1Xhedonic = (FramingCode1)*(NormCode1)*(hedonic),
+         framing1Xnorm2Xhedonic = (FramingCode1)*(NormCode2)*(hedonic),
+         framing1Xnorm3Xhedonic = (FramingCode1)*(NormCode3)*(hedonic),
+         framing1Xnorm4Xhedonic = (FramingCode1)*(NormCode4)*(hedonic),
+         framing2Xnorm1Xhedonic = (FramingCode2)*(NormCode1)*(hedonic),
+         framing2Xnorm2Xhedonic = (FramingCode2)*(NormCode2)*(hedonic),
+         framing2Xnorm3Xhedonic = (FramingCode2)*(NormCode3)*(hedonic),
+         framing2Xnorm4Xhedonic = (FramingCode2)*(NormCode4)*(hedonic),
+         
+         framing1Xingroup = (FramingCode1)*(ingroup_identification),
+         framing2Xingroup = (FramingCode2)*(ingroup_identification),
+         norm1Xingroup = (NormCode1)*(ingroup_identification),
+         norm2Xingroup = (NormCode2)*(ingroup_identification),
+         norm3Xingroup = (NormCode3)*(ingroup_identification),
+         norm4Xingroup = (NormCode4)*(ingroup_identification),
+         framing1Xnorm1Xingroup = (FramingCode1)*(NormCode1)*(ingroup_identification),
+         framing1Xnorm2Xingroup = (FramingCode1)*(NormCode2)*(ingroup_identification),
+         framing1Xnorm3Xingroup = (FramingCode1)*(NormCode3)*(ingroup_identification),
+         framing1Xnorm4Xingroup = (FramingCode1)*(NormCode4)*(ingroup_identification),
+         framing2Xnorm1Xingroup = (FramingCode2)*(NormCode1)*(ingroup_identification),
+         framing2Xnorm2Xingroup = (FramingCode2)*(NormCode2)*(ingroup_identification),
+         framing2Xnorm3Xingroup = (FramingCode2)*(NormCode3)*(ingroup_identification),
+         framing2Xnorm4Xingroup = (FramingCode2)*(NormCode4)*(ingroup_identification))
+```
+
+
+
+## Imputation model
+
+```{r}
+set.seed(114950518)
+```
+
+- check out mice.impute.smcfcs 
+
+```{r echo = FALSE}
+imps <- smcfcs(data_R_alt, 
+               smtype = "lm", 
+               smformula = "consumer_intentions ~ framing_condition + norm_condition + framing_condition*norm_condition + ingroup_identification + framing1Xingroup + framing2Xingroup + norm1Xingroup + norm2Xingroup + norm3Xingroup + norm4Xingroup + framing1Xnorm1Xingroup + framing1Xnorm2Xingroup + framing1Xnorm3Xingroup + framing1Xnorm4Xingroup + framing2Xnorm1Xingroup + framing2Xnorm2Xingroup + framing2Xnorm3Xingroup + framing2Xnorm4Xingroup + clothing_interest + self_deceptive_sdr + impress_manag_sdr + biospheric + framing1Xbiospheric + framing2Xbiospheric + norm1Xbiospheric + norm2Xbiospheric + norm3Xbiospheric + norm4Xbiospheric + framing1Xnorm1Xbiospheric + framing1Xnorm2Xbiospheric + framing1Xnorm3Xbiospheric + framing1Xnorm4Xbiospheric + framing2Xnorm1Xbiospheric + framing2Xnorm2Xbiospheric + framing2Xnorm3Xbiospheric + framing2Xnorm4Xbiospheric + altruistic + framing1Xaltruistic + framing2Xaltruistic + norm1Xaltruistic + norm2Xaltruistic + norm3Xaltruistic + norm4Xaltruistic + framing1Xnorm1Xaltruistic + framing1Xnorm2Xaltruistic + framing1Xnorm3Xaltruistic + framing1Xnorm4Xaltruistic + framing2Xnorm1Xaltruistic + framing2Xnorm2Xaltruistic + framing2Xnorm3Xaltruistic + framing2Xnorm4Xaltruistic + egoistic + framing1Xegoistic + framing2Xegoistic + norm1Xegoistic + norm2Xegoistic + norm3Xegoistic + norm4Xegoistic + framing1Xnorm1Xegoistic + framing1Xnorm2Xegoistic + framing1Xnorm3Xegoistic + framing1Xnorm4Xegoistic + framing2Xnorm1Xegoistic + framing2Xnorm2Xegoistic + framing2Xnorm3Xegoistic + framing2Xnorm4Xegoistic + hedonic + framing1Xhedonic + framing2Xhedonic + norm1Xhedonic + norm2Xhedonic + norm3Xhedonic + norm4Xhedonic + framing1Xnorm1Xhedonic + framing1Xnorm2Xhedonic + framing1Xnorm3Xhedonic + framing1Xnorm4Xhedonic + framing2Xnorm1Xhedonic + framing2Xnorm2Xhedonic + framing2Xnorm3Xhedonic + framing2Xnorm4Xhedonic + consumer_behaviors + Gender + Age", 
+               method = c("norm","norm","norm","norm","","norm","","norm","norm","","logreg","logreg","","","","","","","","","FramingCode1*biospheric","FramingCode2*biospheric","NormCode1*biospheric","NormCode2*biospheric","NormCode3*biospheric","NormCode4*biospheric","FramingCode1*NormCode1*biospheric","FramingCode1*NormCode2*biospheric","FramingCode1*NormCode3*biospheric","FramingCode1*NormCode4*biospheric","FramingCode2*NormCode1*biospheric","FramingCode2*NormCode2*biospheric","FramingCode2*NormCode3*biospheric","FramingCode2*NormCode4*biospheric","FramingCode1*altruistic","FramingCode2*altruistic","NormCode1*altruistic","NormCode2*altruistic","NormCode3*altruistic","NormCode4*altruistic","FramingCode1*NormCode1*altruistic","FramingCode1*NormCode2*altruistic","FramingCode1*NormCode3*altruistic","FramingCode1*NormCode4*altruistic","FramingCode2*NormCode1*altruistic","FramingCode2*NormCode2*altruistic","FramingCode2*NormCode3*altruistic","FramingCode2*NormCode4*altruistic","FramingCode1*egoistic","FramingCode2*egoistic","NormCode1*egoistic","NormCode2*egoistic","NormCode3*egoistic","NormCode4*egoistic","FramingCode1*NormCode1*egoistic","FramingCode1*NormCode2*egoistic","FramingCode1*NormCode3*egoistic","FramingCode1*NormCode4*egoistic","FramingCode2*NormCode1*egoistic","FramingCode2*NormCode2*egoistic","FramingCode2*NormCode3*egoistic","FramingCode2*NormCode4*egoistic","FramingCode1*hedonic","FramingCode2*hedonic","NormCode1*hedonic","NormCode2*hedonic","NormCode3*hedonic","NormCode4*hedonic","FramingCode1*NormCode1*hedonic","FramingCode1*NormCode2*hedonic","FramingCode1*NormCode3*hedonic","FramingCode1*NormCode4*hedonic","FramingCode2*NormCode1*hedonic","FramingCode2*NormCode2*hedonic","FramingCode2*NormCode3*hedonic","FramingCode2*NormCode4*hedonic","","","","","","","","","","","","","",""))
+```
+
+
+Storing imputed data sets
+```{r echo = FALSE}
+impobject <- imputationList(imps$impDatasets)
+```
+
+Restrict range of values on imputed variables
+```{r}
+# bio values
+impobject$imputations[[1]]$biospheric <- ifelse(impobject$imputations[[1]]$biospheric > 7, 7, impobject$imputations[[1]]$biospheric)
+
+impobject$imputations[[2]]$biospheric <- ifelse(impobject$imputations[[2]]$biospheric > 7, 7, impobject$imputations[[2]]$biospheric)
+
+impobject$imputations[[3]]$biospheric <- ifelse(impobject$imputations[[3]]$biospheric > 7, 7, impobject$imputations[[3]]$biospheric)
+
+impobject$imputations[[4]]$biospheric <- ifelse(impobject$imputations[[4]]$biospheric > 7, 7, impobject$imputations[[4]]$biospheric)
+
+impobject$imputations[[5]]$biospheric <- ifelse(impobject$imputations[[5]]$biospheric > 7, 7, impobject$imputations[[5]]$biospheric)
+
+
+# alt values
+impobject$imputations[[1]]$altruistic <- ifelse(impobject$imputations[[1]]$altruistic > 7, 7, impobject$imputations[[1]]$altruistic)
+
+impobject$imputations[[2]]$altruistic <- ifelse(impobject$imputations[[2]]$altruistic > 7, 7, impobject$imputations[[2]]$altruistic)
+
+impobject$imputations[[3]]$altruistic <- ifelse(impobject$imputations[[3]]$altruistic > 7, 7, impobject$imputations[[3]]$altruistic)
+
+impobject$imputations[[4]]$altruistic <- ifelse(impobject$imputations[[4]]$altruistic > 7, 7, impobject$imputations[[4]]$altruistic)
+
+impobject$imputations[[5]]$altruistic <- ifelse(impobject$imputations[[5]]$altruistic > 7, 7, impobject$imputations[[5]]$altruistic)
+
+
+# ego values
+impobject$imputations[[1]]$egoistic <- ifelse(impobject$imputations[[1]]$egoistic > 7, 7, impobject$imputations[[1]]$egoistic)
+
+impobject$imputations[[2]]$egoistic <- ifelse(impobject$imputations[[2]]$egoistic > 7, 7, impobject$imputations[[2]]$egoistic)
+
+impobject$imputations[[3]]$egoistic <- ifelse(impobject$imputations[[3]]$egoistic > 7, 7, impobject$imputations[[3]]$egoistic)
+
+impobject$imputations[[4]]$egoistic <- ifelse(impobject$imputations[[4]]$egoistic > 7, 7, impobject$imputations[[4]]$egoistic)
+
+impobject$imputations[[5]]$egoistic <- ifelse(impobject$imputations[[5]]$egoistic > 7, 7, impobject$imputations[[5]]$egoistic)
+
+
+# hed values
+impobject$imputations[[1]]$hedonic <- ifelse(impobject$imputations[[1]]$hedonic > 7, 7, impobject$imputations[[1]]$hedonic)
+
+impobject$imputations[[2]]$hedonic <- ifelse(impobject$imputations[[2]]$hedonic > 7, 7, impobject$imputations[[2]]$hedonic)
+
+impobject$imputations[[3]]$hedonic <- ifelse(impobject$imputations[[3]]$hedonic > 7, 7, impobject$imputations[[3]]$hedonic)
+
+impobject$imputations[[4]]$hedonic <- ifelse(impobject$imputations[[4]]$hedonic > 7, 7, impobject$imputations[[4]]$hedonic)
+
+impobject$imputations[[5]]$hedonic <- ifelse(impobject$imputations[[5]]$hedonic > 7, 7, impobject$imputations[[5]]$hedonic)
+
+
+# self-deceptive enhancement
+with(impobject, describe(self_deceptive_sdr))
+
+impobject$imputations[[4]]$self_deceptive_sdr <- ifelse(impobject$imputations[[4]]$self_deceptive_sdr < 1, 1, impobject$imputations[[4]]$self_deceptive_sdr)
+
+
+# impr manag
+with(impobject, describe(impress_manag_sdr))
+
+# Age
+describe(data_R_alt$Age)
+with(impobject, describe(Age))
+
+impobject$imputations[[1]]$Age <- ifelse(impobject$imputations[[1]]$Age < 18, 18, impobject$imputations[[1]]$Age)
+
+impobject$imputations[[2]]$Age <- ifelse(impobject$imputations[[2]]$Age < 18, 18, impobject$imputations[[2]]$Age)
+
+impobject$imputations[[3]]$Age <- ifelse(impobject$imputations[[3]]$Age < 18, 18, impobject$imputations[[3]]$Age)
+
+impobject$imputations[[4]]$Age <- ifelse(impobject$imputations[[4]]$Age < 18, 18, impobject$imputations[[4]]$Age)
+
+impobject$imputations[[5]]$Age <- ifelse(impobject$imputations[[5]]$Age < 18, 18, impobject$imputations[[5]]$Age)
+```
+
+
+## Centering continuous predictors
+```{r echo = FALSE}
+# Biospheric values
+impobject$imputations[[1]]$biospheric_center <- impobject$imputations[[1]]$biospheric - mean(impobject$imputations[[1]]$biospheric)
+
+impobject$imputations[[2]]$biospheric_center <- impobject$imputations[[2]]$biospheric - mean(impobject$imputations[[2]]$biospheric)
+
+impobject$imputations[[3]]$biospheric_center <- impobject$imputations[[3]]$biospheric - mean(impobject$imputations[[3]]$biospheric)
+
+impobject$imputations[[4]]$biospheric_center <- impobject$imputations[[4]]$biospheric - mean(impobject$imputations[[4]]$biospheric)
+
+impobject$imputations[[5]]$biospheric_center <- impobject$imputations[[5]]$biospheric - mean(impobject$imputations[[5]]$biospheric)
+
+
+# Altruistic values
+impobject$imputations[[1]]$altruistic_center <- impobject$imputations[[1]]$altruistic - mean(impobject$imputations[[1]]$altruistic)
+
+impobject$imputations[[2]]$altruistic_center <- impobject$imputations[[2]]$altruistic - mean(impobject$imputations[[2]]$altruistic)
+
+impobject$imputations[[3]]$altruistic_center <- impobject$imputations[[3]]$altruistic - mean(impobject$imputations[[3]]$altruistic)
+
+impobject$imputations[[4]]$altruistic_center <- impobject$imputations[[4]]$altruistic - mean(impobject$imputations[[4]]$altruistic)
+
+impobject$imputations[[5]]$altruistic_center <- impobject$imputations[[5]]$altruistic - mean(impobject$imputations[[5]]$altruistic)
+
+
+# Egoistic values
+impobject$imputations[[1]]$egoistic_center <- impobject$imputations[[1]]$egoistic - mean(impobject$imputations[[1]]$egoistic)
+
+impobject$imputations[[2]]$egoistic_center <- impobject$imputations[[2]]$egoistic - mean(impobject$imputations[[2]]$egoistic)
+
+impobject$imputations[[3]]$egoistic_center <- impobject$imputations[[3]]$egoistic - mean(impobject$imputations[[3]]$egoistic)
+
+impobject$imputations[[4]]$egoistic_center <- impobject$imputations[[4]]$egoistic - mean(impobject$imputations[[4]]$egoistic)
+
+impobject$imputations[[5]]$egoistic_center <- impobject$imputations[[5]]$egoistic - mean(impobject$imputations[[5]]$egoistic)
+
+
+# Hedonic values
+impobject$imputations[[1]]$hedonic_center <- impobject$imputations[[1]]$hedonic - mean(impobject$imputations[[1]]$hedonic)
+
+impobject$imputations[[2]]$hedonic_center <- impobject$imputations[[2]]$hedonic - mean(impobject$imputations[[2]]$hedonic)
+
+impobject$imputations[[3]]$hedonic_center <- impobject$imputations[[3]]$hedonic - mean(impobject$imputations[[3]]$hedonic)
+
+impobject$imputations[[4]]$hedonic_center <- impobject$imputations[[4]]$hedonic - mean(impobject$imputations[[4]]$hedonic)
+
+impobject$imputations[[5]]$hedonic_center <- impobject$imputations[[5]]$hedonic - mean(impobject$imputations[[5]]$hedonic)
+
+
+
+# Ingroup identification
+impobject$imputations[[1]]$ingroup_center <- impobject$imputations[[1]]$ingroup_identification - mean(impobject$imputations[[1]]$ingroup_identification)
+
+impobject$imputations[[2]]$ingroup_center <- impobject$imputations[[2]]$ingroup_identification - mean(impobject$imputations[[2]]$ingroup_identification)
+
+impobject$imputations[[3]]$ingroup_center <- impobject$imputations[[3]]$ingroup_identification - mean(impobject$imputations[[3]]$ingroup_identification)
+
+impobject$imputations[[4]]$ingroup_center <- impobject$imputations[[4]]$ingroup_identification - mean(impobject$imputations[[4]]$ingroup_identification)
+
+impobject$imputations[[5]]$ingroup_center <- impobject$imputations[[5]]$ingroup_identification - mean(impobject$imputations[[5]]$ingroup_identification)
+
+
+# Age
+impobject$imputations[[1]]$Age_center <- impobject$imputations[[1]]$Age - mean(impobject$imputations[[1]]$Age)
+
+impobject$imputations[[2]]$Age_center <- impobject$imputations[[2]]$Age - mean(impobject$imputations[[2]]$Age)
+
+impobject$imputations[[3]]$Age_center <- impobject$imputations[[3]]$Age - mean(impobject$imputations[[3]]$Age)
+
+impobject$imputations[[4]]$Age_center <- impobject$imputations[[4]]$Age - mean(impobject$imputations[[4]]$Age)
+
+impobject$imputations[[5]]$Age_center <- impobject$imputations[[5]]$Age - mean(impobject$imputations[[5]]$Age)
+
+
+
+# Clothing interest
+impobject$imputations[[1]]$clothing_center <- impobject$imputations[[1]]$clothing_interest - mean(impobject$imputations[[1]]$clothing_interest)
+
+impobject$imputations[[2]]$clothing_center <- impobject$imputations[[2]]$clothing_interest - mean(impobject$imputations[[2]]$clothing_interest)
+
+impobject$imputations[[3]]$clothing_center <- impobject$imputations[[3]]$clothing_interest - mean(impobject$imputations[[3]]$clothing_interest)
+
+impobject$imputations[[4]]$clothing_center <- impobject$imputations[[4]]$clothing_interest - mean(impobject$imputations[[4]]$clothing_interest)
+
+impobject$imputations[[5]]$clothing_center <- impobject$imputations[[5]]$clothing_interest - mean(impobject$imputations[[5]]$clothing_interest)
+
+
+
+# Self deceptive SDR
+impobject$imputations[[1]]$self_dec_center <- impobject$imputations[[1]]$self_deceptive_sdr - mean(impobject$imputations[[1]]$self_deceptive_sdr)
+
+impobject$imputations[[2]]$self_dec_center <- impobject$imputations[[2]]$self_deceptive_sdr - mean(impobject$imputations[[2]]$self_deceptive_sdr)
+
+impobject$imputations[[3]]$self_dec_center <- impobject$imputations[[3]]$self_deceptive_sdr - mean(impobject$imputations[[3]]$self_deceptive_sdr)
+
+impobject$imputations[[4]]$self_dec_center <- impobject$imputations[[4]]$self_deceptive_sdr - mean(impobject$imputations[[4]]$self_deceptive_sdr)
+
+impobject$imputations[[5]]$self_dec_center <- impobject$imputations[[5]]$self_deceptive_sdr - mean(impobject$imputations[[5]]$self_deceptive_sdr)
+
+
+# Impression management SDR
+impobject$imputations[[1]]$impress_manag_center <- impobject$imputations[[1]]$impress_manag_sdr - mean(impobject$imputations[[1]]$impress_manag_sdr)
+
+impobject$imputations[[2]]$impress_manag_center <- impobject$imputations[[2]]$impress_manag_sdr - mean(impobject$imputations[[2]]$impress_manag_sdr)
+
+impobject$imputations[[3]]$impress_manag_center <- impobject$imputations[[3]]$impress_manag_sdr - mean(impobject$imputations[[3]]$impress_manag_sdr)
+
+impobject$imputations[[4]]$impress_manag_center <- impobject$imputations[[4]]$impress_manag_sdr - mean(impobject$imputations[[4]]$impress_manag_sdr)
+
+impobject$imputations[[5]]$impress_manag_center <- impobject$imputations[[5]]$impress_manag_sdr - mean(impobject$imputations[[5]]$impress_manag_sdr)
+
+
+# Coding Gender
+contrasts(impobject$imputations[[1]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[2]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[3]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[4]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[5]]$Gender) <- c(1/2, -1/2)
+```
+
+
+
+Convert `scmfcs` object to a `mids` object (to make the object compatible with `mice`, and thus, `emmeans`):
+```{r}
+mids_obj <- datlist2mids(impobject)
+```
+
+Complete data set:
+```{r complete imputed data set, include = FALSE}
+complete_data <- complete(mids_obj, "long")
+```
+
+
+# Descriptive Statistics
+
+n per Condition
+```{r}
+data_R_alt %>%
+  group_by(framing_condition, norm_condition) %>%
+  summarise(n = n()) %>% 
+  knitr::kable(digits = 2)
+
+data_R_alt %>%
+  group_by(norm_condition) %>%
+  summarise(n = n())
+
+data_R_alt %>%
+  group_by(framing_condition) %>%
+  summarise(n = n())
+```
+
+
+Descriptives for variables with NO missing data
+
+Variables with NO missing data:
+
+* ingroup_identification
+* clothing_interest
+* consumer_intentions
+* framing_condition
+* norm_condition
+
+```{r}
+with(mids_obj, psych::describe(clothing_interest)) # describe
+with(mids_obj, sd(clothing_interest)) # sd
+with(mids_obj, mlv(clothing_interest, method = "mfv")) # mode
+with(mids_obj, tab1(clothing_interest, decimal = 2, sort.group = "decreasing", graph = FALSE)) # frequency table
+with(mids_obj, hist(clothing_interest, main = "Histogram of Clothing Interest", xlab = "Clothing Interest", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.5)) # histogram
+
+
+with(mids_obj, psych::describe(ingroup_identification))
+with(mids_obj, sd(ingroup_identification))
+with(mids_obj, mlv(ingroup_identification, method = "mfv"))
+with(mids_obj, tab1(ingroup_identification, sort.group = "decreasing", graph = FALSE)) 
+with(mids_obj, hist(ingroup_identification, main = "Histogram of Ingroup Identification", xlab = "Ingroup Identification", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.5))
+
+
+with(mids_obj, psych::describe(consumer_intentions))
+with(mids_obj, sd(consumer_intentions))
+with(mids_obj, mlv(consumer_intentions, method = "mfv"))
+with(mids_obj, tab1(consumer_intentions, decimal = 2, sort.group = "decreasing", graph = FALSE))
+with(mids_obj, hist(consumer_intentions, main = "Histogram of Consumer Intentions", xlab = "Consumer Intentions", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.5)) 
+```
+
+Descriptive Statistics for Consumer Intentions
+```{r}
+data_R_alt %>%
+  group_by(framing_condition, norm_condition) %>%
+  summarise(mean = mean(consumer_intentions),
+            sd = sd(consumer_intentions)) %>% 
+  knitr::kable(digits = 2)
+```
+
+
+Descriptives for variables with missing data:
+
+* Biospheric values
+* Altruistic values
+* Egoistic values
+* Hedonic values
+* Self-deceptive enhancement
+* Impression management
+* Age
+
+* Gender
+* Consumer behaviors
+
+Values
+```{r}
+data_R_alt %>%
+  dplyr::select(biospheric) %>%
+  describe()
+
+with(mids_obj, psych::describe(biospheric)) # describe
+with(mids_obj, mean(biospheric)) # mean
+with(mids_obj, sd(biospheric)) # sd
+with(mids_obj, skew(biospheric)) # skew
+with(mids_obj, mlv(biospheric, method = "mfv")) # mode
+with(mids_obj, tab1(biospheric, decimal = 2, sort.group = "decreasing", graph = FALSE)) # frequency table
+
+
+data_R_alt %>%
+  dplyr::select(altruistic) %>%
+  describe()
+
+with(mids_obj, psych::describe(altruistic))
+with(mids_obj, mean(altruistic)) # mean
+with(mids_obj, sd(altruistic)) # sd
+with(mids_obj, skew(altruistic)) # skew
+with(mids_obj, mlv(altruistic, method = "mfv"))
+with(mids_obj, tab1(altruistic, sort.group = "decreasing", graph = FALSE)) 
+
+data_R_alt %>%
+  dplyr::select(egoistic) %>%
+  describe()
+
+with(mids_obj, psych::describe(egoistic))
+with(mids_obj, mean(egoistic)) # mean
+with(mids_obj, sd(egoistic)) # sd
+with(mids_obj, skew(egoistic)) # skew
+with(mids_obj, mlv(egoistic, method = "mfv"))
+with(mids_obj, tab1(egoistic, decimal = 2, sort.group = "decreasing", graph = FALSE))
+
+
+data_R_alt %>%
+  dplyr::select(hedonic) %>%
+  describe()
+
+with(mids_obj, psych::describe(hedonic))
+with(mids_obj, mean(hedonic)) # mean
+with(mids_obj, sd(hedonic)) # sd
+with(mids_obj, skew(hedonic)) # skew
+with(mids_obj, mlv(hedonic, method = "mfv"))
+with(mids_obj, tab1(hedonic, decimal = 2, sort.group = "decreasing", graph = FALSE))
+
+
+# plotting multiple histograms
+imp5_data <- complete_data %>% 
+  filter(.imp == 5)
+
+par(mfrow = c(2,2))
+
+hist(imp5_data$biospheric, main = "Histogram of Biospheric Values", xlab = "Biospheric Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2) # histogram
+
+hist(imp5_data$altruistic, main = "Histogram of Altruistic Values", xlab = "Altruistic Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+hist(imp5_data$egoistic, main = "Histogram of Egoistic Values", xlab = "Egoistic Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+hist(imp5_data$hedonic, main = "Histogram of Hedonic Values", xlab = "Hedonic Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+```
+
+
+Socially desirable responding & age
+```{r}
+data_R_alt %>%
+  dplyr::select(self_deceptive_sdr) %>%
+  describe()
+
+with(mids_obj, psych::describe(self_deceptive_sdr))
+with(mids_obj, mean(self_deceptive_sdr)) # mean
+with(mids_obj, sd(self_deceptive_sdr)) # sd
+with(mids_obj, skew(self_deceptive_sdr)) # skew
+with(mids_obj, mlv(self_deceptive_sdr, method = "mfv"))
+with(mids_obj, tab1(self_deceptive_sdr, decimal = 2, sort.group = "decreasing", graph = FALSE))
+
+data_R_alt %>%
+  dplyr::select(impress_manag_sdr) %>%
+  describe()
+
+with(mids_obj, psych::describe(impress_manag_sdr))
+with(mids_obj, mean(impress_manag_sdr)) # mean
+with(mids_obj, sd(impress_manag_sdr)) # sd
+with(mids_obj, skew(impress_manag_sdr)) # skew
+with(mids_obj, mlv(impress_manag_sdr, method = "mfv"))
+with(mids_obj, tab1(impress_manag_sdr, decimal = 2, sort.group = "decreasing", graph = FALSE))
+
+data_R_alt %>%
+  dplyr::select(Age) %>%
+  describe()
+
+with(mids_obj, psych::describe(Age))
+with(mids_obj, mean(Age)) # mean
+with(mids_obj, sd(Age)) # sd
+with(mids_obj, skew(Age)) # skew
+with(mids_obj, mlv(Age, method = "mfv"))
+with(mids_obj, tab1(Age, decimal = 2, sort.group = "decreasing", graph = FALSE))
+
+
+par(mfrow = c(2,2))
+
+hist(imp5_data$self_deceptive_sdr, main = "Histogram of Self-deceptive Enhancement", xlab = "Self-deceptive Enhancement", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+hist(imp5_data$impress_manag_sdr, main = "Histogram of Impression Management", xlab = "Impression Management", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+hist(imp5_data$Age, main = "Histogram of Age", xlab = "Age", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+```
+
+
+
+
+# Regression Analysis (DV = Consumer Intentions)
+
+## Running Model
+```{r include = FALSE}
+mod_mice <- with(mids_obj, lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center))
+```
+
+```{r include = FALSE}
+pool_obj <- pool(mod_mice)
+pool_obj
+```
+
+
+## Pooled Regression Results
+
+Using `mice` package:
+```{r echo = FALSE}
+pool_summ <- summary(pool(mod_mice))
+pool_summ %>%
+  knitr::kable(digits = 3)
+```
+
+APA style table for regression summary
+```{r}
+apa_table(pool_summ,
+          caption = "Table 1 Pooled Regression Results",
+          note = "DV = Consumer Intentions")
+```
+
+
+## Standardized Regression Coefficients
+
+Using scale()
+```{r include = FALSE}
+mod_mice_std <- with(mids_obj, lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age)))
+```
+
+
+```{r}
+pool_summ_std <- summary(pool(mod_mice_std))
+
+pool_summ_std %>%
+  knitr::kable(digits = 3)
+```
+
+APA style table for regression summary
+```{r}
+apa_table(pool_summ_std,
+          caption = "Table 1b Pooled Standardized Regression Results",
+          note = "DV = Consumer Intentions")
+```
+
+
+
+## Pooled Anova Results
+
+
+Using Anova()
+```{r include = FALSE, echo = FALSE, warning = FALSE}
+anova_mod2 <- with(mids_obj, Anova(lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center), type = "III"))
+```
+
+doesn't have a pooling option
+```{r}
+# anova_mod2
+```
+
+
+
+Using mi.anova()
+
+- Uses D2 test
+```{r include = FALSE}
+anova_mod3 <- mi.anova(mi.res = mids_obj, formula = "consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center", type = 3)
+```
+
+```{r}
+anova_mod3 %>%
+  knitr::kable(digits = c(2, 2, 2, 2, 3, 3, 3))
+```
+
+
+
+# Analysis in each imputed data set 
+
+## Imputed Data 1
+```{r include = FALSE}
+#data_imp1a <- complete_data %>%
+ # filter(.imp == 1)
+
+data_imp1 <- impobject$imputations[[1]]
+
+mod_mice_imp1 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp1)
+```
+
+### Regression summary
+```{r include = FALSE}
+summary_imp1 <- summary(mod_mice_imp1)
+summary_imp1
+```
+
+Succinct summary
+```{r}
+summary_imp1_print <- summary_imp1$coefficients
+
+summary_imp1_print  %>%
+  knitr::kable(digits = c(2, 2, 2, 3))
+```
+
+
+APA style table for regression summary
+```{r}
+apa_summ_imp1 <- apa_print(summary_imp1)
+
+apa_summ_imp1$table %>%
+apa_table(caption = "Table 2 Regression Results Using Imputed Data 1",
+          note = "DV = Consumer Intentions")
+```
+
+
+Standardized regression coefficients
+```{r include = FALSE}
+std_imp1 <- lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age), data = data_imp1)
+
+summ_std_imp1 <- summary(std_imp1)
+```
+
+APA summary of standardized coefficients
+```{r include = FALSE}
+print_summ_std_imp1 <- apa_print(summ_std_imp1)
+
+apa_table(print_summ_std_imp1)
+```
+
+
+### ANOVA summary
+```{r}
+Anova(mod_mice_imp1, type = 3) %>%
+  knitr::kable(digits = c(2, 2, 2, 3))
+```
+
+### Effect Size
+```{r}
+etaSquared(mod_mice_imp1, type = 3, anova = TRUE) %>% 
+  knitr::kable(digits = 3)
+```
+
+
+
+### Regression Diagnostics
+
+#### Checking non-linearity
+
+First, assess non-linearity using a residuals plots:
+```{r}
+par(mfrow = c(1,1))
+plot(mod_mice_imp1, 1)
+```
+
+There does not appear to be a systematic pattern suggesting an uncaptured, non-linear trend.
+
+#### Checking non-normally distributed errors
+
+Second, assess non-normally distributed errors by plotting the residuals & using a QQ-plot:
+```{r}
+# storing residuals
+store_residuals <- augment(mod_mice_imp1)
+
+# plotting histogram of residuals
+ggplot(data = store_residuals, aes(x = .resid)) + 
+  geom_density(fill = "purple") + 
+  stat_function(linetype = 2, 
+                fun      = dnorm, 
+                args     = list(mean = mean(store_residuals$.resid), 
+                                sd   =   sd(store_residuals$.resid))) +
+  theme_minimal()
+
+
+# QQ-plot
+ggplot(mod_mice_imp1) +
+  geom_abline(color = "turquoise4") + 
+  stat_qq(aes(sample = .stdresid), color = "darkorchid4", alpha = .50) +
+  theme_minimal()
+```
+
+The distribution of residuals & QQ-plot suggest approximately normally distributed residuals.
+
+#### Checking heteroscedasticity
+
+Third, check for heteroscedasticity by looking at spread of residuals on residuals plot:
+```{r}
+plot(mod_mice_imp1, 1)
+```
+
+The spread of the residuals appears to be approximately the same across the range of fitted values.
+
+
+#### Checking multivariate outliers
+
+Outliers based on distance from model using standardized residuals:
+```{r}
+# using olsrr function
+ols_plot_resid_stand(mod_mice_imp1)
+
+
+# or grabbing from model augment output
+model_aug <- augment(mod_mice_imp1)
+
+model_aug$id <- mod_mice_imp1$.rownames
+
+std_resids <- model_aug %>% 
+  dplyr::select(.rownames, .std.resid) %>%
+  arrange(desc(abs(.std.resid)))
+
+print(std_resids, n = 15)
+```
+
+Examine outliers with standardized residuals greater than +/-2 or +/-3.
+
+Outliers based on influence on model using Cook's Distance:
+```{r}
+# using olsrr function
+ols_plot_cooksd_chart(mod_mice_imp1)
+
+# or grabbing from model augment output
+cooks_d <- model_aug %>% 
+  dplyr::select(.rownames, .cooksd) %>%
+  arrange(desc(abs(.cooksd)))
+
+print(cooks_d, n = 15)
+```
+
+One standard is that Cook's D values greater than 3 times the average Cook's D values are worth investigating.
+
+
+#### Checking multicollinearity
+
+Using VIFs & tolerance:
+```{r}
+ols_vif_tol(mod_mice_imp1) %>%
+  arrange(desc(abs(VIF)))
+```
+
+Either a *low* tolerance (below 0.20 is one rule of thumb) or a *high* VIF (above 5 or 10) is an indication of a problem with multicollinearity.
+
+
+
+
+
+## Imputed Data 2
+```{r include = FALSE}
+data_imp2 <- impobject$imputations[[2]]
+
+mod_mice_imp2 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp2)
+```
+
+### Regression summary
+```{r include = FALSE, echo = FALSE}
+summary_imp2 <- summary(mod_mice_imp2)
+summary_imp2
+```
+
+Succinct summary
+```{r} 
+summary_imp2$coefficients %>%
+  knitr::kable(digits = c(2, 2, 2, 3))
+```
+
+APA style table for regression summary
+```{r}
+apa_summ_imp2 <- apa_print(summary_imp2)
+
+apa_summ_imp2$table %>%
+apa_table(caption = "Table 3 Regression Results Using Imputed Data 2",
+          note = "DV = Consumer Intentions")
+```
+
+
+Standardized regression coefficients
+```{r include = FALSE}
+std_imp2 <- lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age), data = data_imp2)
+
+summ_std_imp2 <- summary(std_imp2)
+```
+
+APA summary of standardized coefficients
+```{r include = FALSE}
+print_summ_std_imp2 <- apa_print(summ_std_imp2)
+
+apa_table(print_summ_std_imp2)
+```
+
+
+### ANOVA summary
+```{r}
+Anova(mod_mice_imp2, type = 3) %>%
+  knitr::kable(digits = c(2, 2, 2, 3))
+```
+
+### Effect Size
+```{r}
+etaSquared(mod_mice_imp2, type = 3, anova = TRUE) %>% 
+  knitr::kable(digits = 3)
+```
+
+
+### Regression Diagnostics
+
+#### Checking non-linearity
+
+First, assess non-linearity using a residuals plots:
+```{r}
+plot(mod_mice_imp2, 1)
+```
+
+There does not appear to be a systematic pattern suggesting an uncaptured, non-linear trend.
+
+#### Checking non-normally distributed errors
+
+Second, assess non-normally distributed errors by plotting the residuals & using a QQ-plot:
+```{r}
+# storing residuals
+store_residuals <- augment(mod_mice_imp2)
+
+# plotting histogram of residuals
+ggplot(data = store_residuals, aes(x = .resid)) + 
+  geom_density(fill = "purple") + 
+  stat_function(linetype = 2, 
+                fun      = dnorm, 
+                args     = list(mean = mean(store_residuals$.resid), 
+                                sd   =   sd(store_residuals$.resid))) +
+  theme_minimal()
+
+
+# QQ-plot
+ggplot(mod_mice_imp2) +
+  geom_abline(color = "turquoise4") + 
+  stat_qq(aes(sample = .stdresid), color = "darkorchid4", alpha = .50) +
+  theme_minimal()
+```
+
+The distribution of residuals & QQ-plot suggest approximately normally distributed residuals.
+
+#### Checking heteroscedasticity
+
+Third, check for heteroscedasticity by looking at spread of residuals on residuals plot:
+```{r}
+plot(mod_mice_imp2, 1)
+```
+
+The spread of the residuals appears to be approximately the same across the range of fitted values.
+
+
+#### Checking multivariate outliers
+
+Outliers based on distance from model using standardized residuals:
+```{r}
+# using olsrr function
+ols_plot_resid_stand(mod_mice_imp2)
+
+
+# or grabbing from model augment output
+model_aug <- augment(mod_mice_imp2)
+
+model_aug$id <- mod_mice_imp2$.rownames
+
+std_resids <- model_aug %>% 
+  dplyr::select(.rownames, .std.resid) %>%
+  arrange(desc(abs(.std.resid)))
+
+print(std_resids, n = 15)
+```
+
+Examine outliers with standardized residuals greater than +/-2 or +/-3.
+
+Outliers based on influence on model using Cook's Distance:
+```{r}
+# using olsrr function
+ols_plot_cooksd_chart(mod_mice_imp2)
+
+# or grabbing from model augment output
+cooks_d <- model_aug %>% 
+  dplyr::select(.rownames, .cooksd) %>%
+  arrange(desc(abs(.cooksd)))
+
+print(cooks_d, n = 15)
+```
+
+One standard is that Cook's D values greater than 3 times the average Cook's D values are worth investigating.
+
+
+#### Checking multicollinearity
+
+Using VIFs & tolerance:
+```{r}
+ols_vif_tol(mod_mice_imp2) %>%
+  arrange(desc(abs(VIF)))
+```
+
+Either a *low* tolerance (below 0.20 is one rule of thumb) or a *high* VIF (above 5 or 10) is an indication of a problem with multicollinearity.
+
+
+
+## Imputed Data 3
+```{r include = FALSE}
+data_imp3 <- impobject$imputations[[3]]
+
+mod_mice_imp3 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp3)
+```
+
+### Regression summary
+```{r include = FALSE, echo = FALSE}
+summary_imp3 <- summary(mod_mice_imp3)
+summary_imp3
+```
+
+Succinct summary
+```{r}
+summary_imp3$coefficients %>%
+  knitr::kable(digits = c(2, 2, 2, 3))
+```
+
+APA style table for regression summary
+```{r}
+apa_summ_imp3 <- apa_print(summary_imp3)
+
+apa_summ_imp3$table %>%
+apa_table(caption = "Table 4 Regression Results Using Imputed Data 3",
+          note = "DV = Consumer Intentions")
+```
+
+
+Standardized regression coefficients
+```{r include = FALSE}
+std_imp3 <- lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age), data = data_imp3)
+
+summ_std_imp3 <- summary(std_imp3)
+```
+
+APA summary of standardized coefficients
+```{r include = FALSE}
+print_summ_std_imp3 <- apa_print(summ_std_imp3)
+
+apa_table(print_summ_std_imp1)
+```
+
+
+### ANOVA summary
+```{r}
+Anova(mod_mice_imp3, type = 3) %>%
+  knitr::kable(digits = c(2, 2, 2, 3))
+```
+
+### Effect Size
+```{r}
+etaSquared(mod_mice_imp3, type = 3, anova = TRUE) %>% 
+  knitr::kable(digits = 3)
+```
+
+
+### Regression Diagnostics
+
+#### Checking non-linearity
+
+First, assess non-linearity using a residuals plots:
+```{r}
+plot(mod_mice_imp3, 1)
+```
+
+There does not appear to be a systematic pattern suggesting an uncaptured, non-linear trend.
+
+#### Checking non-normally distributed errors
+
+Second, assess non-normally distributed errors by plotting the residuals & using a QQ-plot:
+```{r}
+# storing residuals
+store_residuals <- augment(mod_mice_imp3)
+
+# plotting histogram of residuals
+ggplot(data = store_residuals, aes(x = .resid)) + 
+  geom_density(fill = "purple") + 
+  stat_function(linetype = 2, 
+                fun      = dnorm, 
+                args     = list(mean = mean(store_residuals$.resid), 
+                                sd   =   sd(store_residuals$.resid))) +
+  theme_minimal()
+
+
+# QQ-plot
+ggplot(mod_mice_imp2) +
+  geom_abline(color = "turquoise4") + 
+  stat_qq(aes(sample = .stdresid), color = "darkorchid4", alpha = .50) +
+  theme_minimal()
+```
+
+The distribution of residuals & QQ-plot suggest approximately normally distributed residuals.
+
+
+#### Checking heteroscedasticity
+
+Third, check for heteroscedasticity by looking at spread of residuals on residuals plot:
+```{r}
+plot(mod_mice_imp3, 1)
+```
+
+The spread of the residuals appears to be approximately the same across the range of fitted values.
+
+
+#### Checking multivariate outliers
+
+Outliers based on distance from model using standardized residuals:
+```{r}
+# using olsrr function
+ols_plot_resid_stand(mod_mice_imp3)
+
+
+# or grabbing from model augment output
+model_aug <- augment(mod_mice_imp3)
+
+model_aug$id <- mod_mice_imp3$.rownames
+
+std_resids <- model_aug %>% 
+  dplyr::select(.rownames, .std.resid) %>%
+  arrange(desc(abs(.std.resid)))
+
+print(std_resids, n = 15)
+```
+
+Examine outliers with standardized residuals greater than +/-2 or +/-3.
+
+Outliers based on influence on model using Cook's Distance:
+```{r}
+# using olsrr function
+ols_plot_cooksd_chart(mod_mice_imp3)
+
+# or grabbing from model augment output
+cooks_d <- model_aug %>% 
+  dplyr::select(.rownames, .cooksd) %>%
+  arrange(desc(abs(.cooksd)))
+
+print(cooks_d, n = 15)
+```
+
+One standard is that Cook's D values greater than 3 times the average Cook's D values are worth investigating.
+
+
+#### Checking multicollinearity
+
+Using VIFs & tolerance:
+```{r}
+ols_vif_tol(mod_mice_imp3) %>%
+  arrange(desc(abs(VIF)))
+```
+
+Either a *low* tolerance (below 0.20 is one rule of thumb) or a *high* VIF (above 5 or 10) is an indication of a problem with multicollinearity.
+
+
+
+
+## Imputed Data 4
+```{r include = FALSE}
+data_imp4 <- impobject$imputations[[4]]
+
+mod_mice_imp4 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp4)
+```
+
+### Regression summary
+```{r include = FALSE}
+summary_imp4 <- summary(mod_mice_imp4)
+summary_imp4
+```
+
+Succinct summary
+```{r}
+summary_imp4$coefficients %>%
+  knitr::kable(digits = c(2, 2, 2, 3))
+```
+
+
+APA style table for regression summary
+```{r}
+apa_summ_imp4 <- apa_print(summary_imp4)
+
+apa_summ_imp4$table %>%
+apa_table(caption = "Table 5 Regression Results Using Imputed Data 4",
+          note = "DV = Consumer Intentions")
+```
+
+
+Standardized regression coefficients
+```{r include = FALSE}
+std_imp4 <- lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age), data = data_imp4)
+
+summ_std_imp4 <- summary(std_imp4)
+```
+
+APA summary of standardized coefficients
+```{r include = FALSE}
+print_summ_std_imp4 <- apa_print(summ_std_imp4)
+
+apa_table(print_summ_std_imp4)
+```
+
+
+### ANOVA summary
+```{r}
+Anova(mod_mice_imp4, type = 3) %>%
+  knitr::kable(digits = c(2, 2, 2, 3))
+```
+
+### Effect Size
+```{r}
+etaSquared(mod_mice_imp4, type = 3, anova = TRUE) %>% 
+  knitr::kable(digits = 3)
+```
+
+
+
+### Regression Diagnostics
+
+#### Checking non-linearity
+
+First, assess non-linearity using a residuals plots:
+```{r}
+plot(mod_mice_imp4, 1)
+```
+
+There does not appear to be a systematic pattern suggesting an uncaptured, non-linear trend.
+
+#### Checking non-normally distributed errors
+
+Second, assess non-normally distributed errors by plotting the residuals & using a QQ-plot:
+```{r}
+# storing residuals
+store_residuals <- augment(mod_mice_imp4)
+
+# plotting histogram of residuals
+ggplot(data = store_residuals, aes(x = .resid)) + 
+  geom_density(fill = "purple") + 
+  stat_function(linetype = 2, 
+                fun      = dnorm, 
+                args     = list(mean = mean(store_residuals$.resid), 
+                                sd   =   sd(store_residuals$.resid))) +
+  theme_minimal()
+
+
+# QQ-plot
+ggplot(mod_mice_imp2) +
+  geom_abline(color = "turquoise4") + 
+  stat_qq(aes(sample = .stdresid), color = "darkorchid4", alpha = .50) +
+  theme_minimal()
+```
+
+The distribution of residuals & QQ-plot suggest approximately normally distributed residuals.
+
+
+#### Checking heteroscedasticity
+
+Third, check for heteroscedasticity by looking at spread of residuals on residuals plot:
+```{r}
+plot(mod_mice_imp4, 1)
+```
+
+The spread of the residuals appears to be approximately the same across the range of fitted values.
+
+
+#### Checking multivariate outliers
+
+Outliers based on distance from model using standardized residuals:
+```{r}
+# using olsrr function
+ols_plot_resid_stand(mod_mice_imp4)
+
+
+# or grabbing from model augment output
+model_aug <- augment(mod_mice_imp4)
+
+model_aug$id <- mod_mice_imp3$.rownames
+
+std_resids <- model_aug %>% 
+  dplyr::select(.rownames, .std.resid) %>%
+  arrange(desc(abs(.std.resid)))
+
+print(std_resids, n = 15)
+```
+
+Examine outliers with standardized residuals greater than +/-2 or +/-3.
+
+Outliers based on influence on model using Cook's Distance:
+```{r}
+# using olsrr function
+ols_plot_cooksd_chart(mod_mice_imp4)
+
+# or grabbing from model augment output
+cooks_d <- model_aug %>% 
+  dplyr::select(.rownames, .cooksd) %>%
+  arrange(desc(abs(.cooksd)))
+
+print(cooks_d, n = 15)
+```
+
+One standard is that Cook's D values greater than 3 times the average Cook's D values are worth investigating.
+
+
+#### Checking multicollinearity
+
+Using VIFs & tolerance:
+```{r}
+ols_vif_tol(mod_mice_imp4) %>%
+  arrange(desc(abs(VIF)))
+```
+
+Either a *low* tolerance (below 0.20 is one rule of thumb) or a *high* VIF (above 5 or 10) is an indication of a problem with multicollinearity.
+
+
+
+
+
+
+## Imputed Data 5
+```{r include = FALSE}
+data_imp5 <- impobject$imputations[[5]]
+
+mod_mice_imp5 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp5)
+```
+
+### Regression summary
+```{r include = FALSE}
+summary_imp5 <- summary(mod_mice_imp5)
+summary_imp5
+```
+
+Succinct summary
+```{r echo = FALSE}
+summary_imp5$coefficients %>%
+  knitr::kable(digits = c(2, 2, 2, 3))
+```
+
+APA style table for regression summary
+```{r}
+apa_summ_imp5 <- apa_print(summary_imp5)
+
+apa_summ_imp5$table %>%
+apa_table(caption = "Table 6 Regression Results Using Imputed Data 5",
+          note = "DV = Consumer Intentions")
+```
+
+
+Standardized regression coefficients
+```{r include = FALSE}
+std_imp5 <- lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age), data = data_imp5)
+
+summ_std_imp5 <- summary(std_imp5)
+```
+
+APA summary of standardized coefficients
+```{r include = FALSE}
+print_summ_std_imp5 <- apa_print(summ_std_imp5)
+
+apa_table(print_summ_std_imp5)
+```
+
+
+### ANOVA summary
+```{r}
+Anova(mod_mice_imp5, type = 3) %>%
+  knitr::kable(digits = c(2, 2, 2, 3))
+```
+
+### Effect Size
+```{r}
+etaSquared(mod_mice_imp5, type = 3, anova = TRUE) %>% 
+  knitr::kable(digits = 3)
+```
+
+
+
+### Regression Diagnostics
+
+#### Checking non-linearity
+
+First, assess non-linearity using a residuals plots:
+```{r}
+plot(mod_mice_imp5, 1)
+```
+
+There does not appear to be a systematic pattern suggesting an uncaptured, non-linear trend.
+
+#### Checking non-normally distributed errors
+
+Second, assess non-normally distributed errors by plotting the residuals & using a QQ-plot:
+```{r}
+# storing residuals
+store_residuals <- augment(mod_mice_imp5)
+
+# plotting histogram of residuals
+ggplot(data = store_residuals, aes(x = .resid)) + 
+  geom_density(fill = "purple") + 
+  stat_function(linetype = 2, 
+                fun      = dnorm, 
+                args     = list(mean = mean(store_residuals$.resid), 
+                                sd   =   sd(store_residuals$.resid))) +
+  theme_minimal()
+
+
+# QQ-plot
+ggplot(mod_mice_imp5) +
+  geom_abline(color = "turquoise4") + 
+  stat_qq(aes(sample = .stdresid), color = "darkorchid4", alpha = .50) +
+  theme_minimal()
+```
+
+The distribution of residuals & QQ-plot suggest approximately normally distributed residuals.
+
+
+#### Checking heteroscedasticity
+
+Third, check for heteroscedasticity by looking at spread of residuals on residuals plot:
+```{r}
+plot(mod_mice_imp5, 1)
+```
+
+The spread of the residuals appears to be approximately the same across the range of fitted values.
+
+
+#### Checking multivariate outliers
+
+Outliers based on distance from model using standardized residuals:
+```{r}
+# using olsrr function
+ols_plot_resid_stand(mod_mice_imp5)
+
+
+# or grabbing from model augment output
+model_aug <- augment(mod_mice_imp5)
+
+model_aug$id <- mod_mice_imp5$.rownames
+
+std_resids <- model_aug %>% 
+  dplyr::select(.rownames, .std.resid) %>%
+  arrange(desc(abs(.std.resid)))
+
+print(std_resids, n = 15)
+```
+
+Examine outliers with standardized residuals greater than +/-2 or +/-3.
+
+Outliers based on influence on model using Cook's Distance:
+```{r}
+# using olsrr function
+ols_plot_cooksd_chart(mod_mice_imp5)
+
+# or grabbing from model augment output
+cooks_d <- model_aug %>% 
+  dplyr::select(.rownames, .cooksd) %>%
+  arrange(desc(abs(.cooksd)))
+
+print(cooks_d, n = 15)
+```
+
+One standard is that Cook's D values greater than 3 times the average Cook's D values are worth investigating.
+
+
+#### Checking multicollinearity
+
+Using VIFs & tolerance:
+```{r}
+ols_vif_tol(mod_mice_imp5) %>%
+  arrange(desc(abs(VIF)))
+```
+
+Either a *low* tolerance (below 0.20 is one rule of thumb) or a *high* VIF (above 5 or 10) is an indication of a problem with multicollinearity.
+
+
+
+Comparing imputation models (ANOVA output):
+```{r}
+Anova(mod_mice_imp1, type = 3) %>%
+  knitr::kable(digits = 8)
+
+Anova(mod_mice_imp2, type = 3) %>%
+  knitr::kable(digits = 8)
+
+Anova(mod_mice_imp3, type = 3) %>%
+  knitr::kable(digits = 8)
+
+Anova(mod_mice_imp4, type = 3) %>%
+  knitr::kable(digits = 8)
+
+Anova(mod_mice_imp5, type = 3) %>%
+  knitr::kable(digits = 8)
+```

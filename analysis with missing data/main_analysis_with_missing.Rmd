@@ -14,15 +14,13 @@ editor_options:
 ---
 
 To do:
-
+  * simple effects -> add custom contrasts
+  * add effect sizes / 95%CIs where relevant
+  * update graphs to reflect hypothesis 4
   * logistic regression 
     - marginal means
-    - simple effects analyses
+    - simple effects contrasts
     - descriptive statistics
-  * apa style output (tables)
-  * post-hoc power analyses
-     - modelPower
-  * add effect sizes to simple effects analyses
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
@@ -1746,7 +1744,7 @@ norm_emmeans
 
 Comparing each level of framing condition
 ```{r}
-frame_means <- emmeans(full_model_1a, pairwise ~ framing_condition, adjust = "none")
+frame_means <- emmeans(full_model_1a, pairwise ~ framing_condition, adjust = "tukey")
 
 frame_means$emmeans %>%
   knitr::kable(digits = 2)
@@ -1781,7 +1779,7 @@ eff_size(frame_means, sigma = sigma(full_model_1a), edf = df.residual(full_model
 
 Comparing each level of norm condition:
 ```{r}
-norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition, adjust = "none")
+norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition, adjust = "tukey")
 
 norm_means$emmeans %>% 
   knitr::kable(digits = 2)
@@ -1818,7 +1816,7 @@ eff_size(norm_means, sigma = sigma(full_model_1a), edf = df.residual(full_model_
 
 Effect of norm condition at each level of framing condition:
 ```{r}
-cell_means <- emmeans(full_model_1a, pairwise ~ norm_condition | framing_condition, adjust = "none")
+cell_means <- emmeans(full_model_1a, pairwise ~ norm_condition | framing_condition, adjust = "tukey")
 
 cell_means$emmeans %>%
   knitr::kable(digits = 2)
@@ -1853,7 +1851,7 @@ Comparing consumer intentions for each norm condition between each framing condi
 # Control norm
 chosen_values <- list(norm_condition = c("control_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
 
-control_norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "none")
+control_norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "tukey")
 
 control_norm_means$emmeans %>% 
   knitr::kable(digits = 2)
@@ -1871,7 +1869,7 @@ eff_size(control_norm_means, sigma = sigma(full_model_1a), edf = df.residual(ful
 # Descriptive norm
 chosen_values <- list(norm_condition = c("descriptive_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
 
-descr_norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "none")
+descr_norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "tukey")
 
 descr_norm_means$emmeans %>%
   knitr::kable(digits = 2)
@@ -1889,7 +1887,7 @@ eff_size(descr_norm_means, sigma = sigma(full_model_1a), edf = df.residual(full_
 # Convention norm
 chosen_values <- list(norm_condition = c("convention_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
 
-conv_norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "none")
+conv_norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "tukey")
 
 conv_norm_means$emmeans %>%
   knitr::kable(digits = 2)
@@ -1907,7 +1905,7 @@ eff_size(conv_norm_means, sigma = sigma(full_model_1a), edf = df.residual(full_m
 # Social norm
 chosen_values <- list(norm_condition = c("social_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
 
-soc_norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "none")
+soc_norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "tukey")
 
 soc_norm_means$emmeans %>%
   knitr::kable(digits = 2)
@@ -1925,7 +1923,7 @@ eff_size(soc_norm_means, sigma = sigma(full_model_1a), edf = df.residual(full_mo
 # Moral norm
 chosen_values <- list(norm_condition = c("moral_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
 
-moral_norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "none")
+moral_norm_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "tukey")
 
 moral_norm_means$emmeans %>%
   knitr::kable(digits = 2)
@@ -1948,7 +1946,7 @@ eff_size(moral_norm_means, sigma = sigma(full_model_1a), edf = df.residual(full_
 
 First, relationship between biospheric values & consumer intentions for each norm condition:
 ```{r}
-bio_norm_means <- emtrends(full_model_1a, ~norm_condition, var = "biospheric_center", adjust = "none")
+bio_norm_means <- emtrends(full_model_1a, ~norm_condition, var = "biospheric_center", adjust = "tukey")
 
 bio_norm_means %>%
   knitr::kable(digits = 2)
@@ -1984,7 +1982,7 @@ emmip(full_model_1a, ~ biospheric_center | norm_condition, at = at_list, CIs = T
 Is the slope of the relationship between biospheric values & consumer intentions stronger in any one of the norm conditions compared to the others?
 
 ```{r}
-bio_norm_slopes <- emtrends(full_model_1a, pairwise~norm_condition, var = "biospheric_center", adjust = "none")
+bio_norm_slopes <- emtrends(full_model_1a, pairwise~norm_condition, var = "biospheric_center", adjust = "tukey")
 
 bio_norm_slopes$emtrends %>%
   knitr::kable(digits = 2)
@@ -2003,7 +2001,7 @@ confint(bio_norm_slopes$contrasts) %>%
 
 Second, relationship between biospheric values & consumer intentions for each framing condition:
 ```{r}
-bio_frame_slopes <- emtrends(full_model_1a, ~framing_condition, var = "biospheric_center", adjust = "none")
+bio_frame_slopes <- emtrends(full_model_1a, ~framing_condition, var = "biospheric_center", adjust = "tukey")
 
 bio_frame_slopes %>% 
   knitr::kable(digits = 2)
@@ -2028,7 +2026,7 @@ emmip(full_model_1a, ~ biospheric_center | framing_condition, at = at_list, CIs 
 Is the slope of the relationship between biospheric values & consumer intentions stronger in any one of the framing conditions compared to the others?
 
 ```{r}
-bio_frame_trends <- emtrends(full_model_1a, pairwise~framing_condition, var = "biospheric_center", adjust = "none")
+bio_frame_trends <- emtrends(full_model_1a, pairwise~framing_condition, var = "biospheric_center", adjust = "tukey")
 
 bio_frame_trends$emtrends %>%
   knitr::kable(digits = 2)
@@ -2048,7 +2046,7 @@ confint(bio_frame_trends$contrasts) %>%
 
 Third, interaction between biospheric values, framing, & norm condition:
 ```{r}
-bio_frame_norm_trends <- emtrends(full_model_1a, pairwise~norm_condition | framing_condition, var = "biospheric_center", adjust = "none")
+bio_frame_norm_trends <- emtrends(full_model_1a, pairwise~norm_condition | framing_condition, var = "biospheric_center", adjust = "tukey")
 
 bio_frame_norm_trends$emtrends %>%
   knitr::kable(digits = 2)
@@ -2085,7 +2083,7 @@ emmip(full_model_1a, norm_condition ~ biospheric_center | framing_condition, at 
 
 First, relationship between altruistic values & consumer intentions for each norm condition:
 ```{r}
-emtrends(full_model_1a, ~norm_condition, var = "altruistic_center", adjust = "none") %>%
+emtrends(full_model_1a, ~norm_condition, var = "altruistic_center", adjust = "tukey") %>%
   knitr::kable(digits = 2)
 ```
 
@@ -2113,7 +2111,7 @@ emmip(full_model_1a, ~ altruistic_center | norm_condition, at = at_list, CIs = T
 Is the slope of the relationship between altruistic values & consumer intentions stronger in any one of the norm conditions compared to the others?
 
 ```{r}
-alt_norm_trends <- emtrends(full_model_1a, pairwise~norm_condition, var = "altruistic_center", adjust = "none")
+alt_norm_trends <- emtrends(full_model_1a, pairwise~norm_condition, var = "altruistic_center", adjust = "tukey")
 
 alt_norm_trends$emtrends %>%
   knitr::kable(digits = 2)
@@ -2136,7 +2134,7 @@ The relationship between altruistic values and consumer intentions was also sign
 
 Second, relationship between altruistic values & consumer intentions for each framing condition:
 ```{r}
-emtrends(full_model_1a, ~framing_condition, var = "altruistic_center", adjust = "none") %>%
+emtrends(full_model_1a, ~framing_condition, var = "altruistic_center", adjust = "tukey") %>%
   knitr::kable(digits = 2)
 ```
 
@@ -2154,7 +2152,7 @@ emmip(full_model_1a, ~ altruistic_center | framing_condition, at = at_list, CIs 
 Is the slope of the relationship between altruistic values & consumer intentions stronger in any one of the framing conditions compared to the others?
 
 ```{r}
-alt_frame_trends <- emtrends(full_model_1a, pairwise~framing_condition, var = "altruistic_center", adjust = "none")
+alt_frame_trends <- emtrends(full_model_1a, pairwise~framing_condition, var = "altruistic_center", adjust = "tukey")
 
 alt_frame_trends$emtrends %>%
   knitr::kable(digits = 2)
@@ -2177,7 +2175,7 @@ No, the difference between any two slopes was not significant.
 
 Third, interaction between altruistic values, framing, & norm condition:
 ```{r}
-emtrends(full_model_1a, ~norm_condition | framing_condition, var = "altruistic_center", adjust = "none") %>%
+emtrends(full_model_1a, ~norm_condition | framing_condition, var = "altruistic_center", adjust = "tukey") %>%
   knitr::kable(digits = 2)
 ```
 
@@ -2202,7 +2200,7 @@ emmip(full_model_1a, norm_condition ~ altruistic_center | framing_condition, at 
 
 First, relationship between egoistic values & consumer intentions for each norm condition:
 ```{r}
-emtrends(full_model_1a, ~norm_condition, var = "egoistic_center", adjust = "none") %>%
+emtrends(full_model_1a, ~norm_condition, var = "egoistic_center", adjust = "tukey") %>%
   knitr::kable(digits = 2)
 ```
 
@@ -2226,7 +2224,7 @@ emmip(full_model_1a, ~ egoistic_center | norm_condition, at = at_list, CIs = TRU
 Is the slope of the relationship between egoistic values & consumer intentions stronger in any one of the norm conditions compared to the others?
 
 ```{r}
-ego_norm_trends <- emtrends(full_model_1a, pairwise~norm_condition, var = "egoistic_center", adjust = "none")
+ego_norm_trends <- emtrends(full_model_1a, pairwise~norm_condition, var = "egoistic_center", adjust = "tukey")
 
 ego_norm_trends$emtrends %>%
   knitr::kable(digits = 2)
@@ -2248,7 +2246,7 @@ No, the difference between any two slopes was not significant.
 
 Second, relationship between egoistic values & consumer intentions for each framing condition:
 ```{r}
-emtrends(full_model_1a, ~framing_condition, var = "egoistic_center", adjust = "none") %>%
+emtrends(full_model_1a, ~framing_condition, var = "egoistic_center", adjust = "tukey") %>%
   knitr::kable(digits = 2)
 ```
 
@@ -2267,7 +2265,7 @@ emmip(full_model_1a, ~ egoistic_center | framing_condition, at = at_list, CIs = 
 Is the slope of the relationship between egoistic values & consumer intentions stronger in any one of the framing conditions compared to the others?
 
 ```{r}
-ego_frame_trends <- emtrends(full_model_1a, pairwise~framing_condition, var = "egoistic_center", adjust = "none")
+ego_frame_trends <- emtrends(full_model_1a, pairwise~framing_condition, var = "egoistic_center", adjust = "tukey")
 
 ego_frame_trends$emtrends %>%
   knitr::kable(digits = 2)
@@ -2290,7 +2288,7 @@ No, the difference between any two slopes was not significant.
 
 Third, interaction between egoistic values, framing, & norm condition:
 ```{r}
-emtrends(full_model_1a, ~norm_condition | framing_condition, var = "egoistic_center", adjust = "none") %>%
+emtrends(full_model_1a, ~norm_condition | framing_condition, var = "egoistic_center", adjust = "tukey") %>%
   knitr::kable(digits = 2)
 ```
 
@@ -2314,7 +2312,7 @@ emmip(full_model_1a, norm_condition ~ egoistic_center | framing_condition, at = 
 
 First, relationship between hedonic values & consumer intentions for each norm condition:
 ```{r}
-emtrends(full_model_1a, ~norm_condition, var = "hedonic_center", adjust = "none") %>%
+emtrends(full_model_1a, ~norm_condition, var = "hedonic_center", adjust = "tukey") %>%
   knitr::kable(digits = 2)
 ```
 
@@ -2338,7 +2336,7 @@ emmip(full_model_1a, ~ hedonic_center | norm_condition, at = at_list, CIs = TRUE
 Is the slope of the relationship between hedonic values & consumer intentions stronger in any one of the norm conditions compared to the others?
 
 ```{r}
-hed_norm_trends <- emtrends(full_model_1a, pairwise~norm_condition, var = "hedonic_center", adjust = "none")
+hed_norm_trends <- emtrends(full_model_1a, pairwise~norm_condition, var = "hedonic_center", adjust = "tukey")
 
 hed_norm_trends$emtrends %>%
   knitr::kable(digits = 2)
@@ -2360,7 +2358,7 @@ There was a significant difference in the relationship between hedonic values an
 
 Second, relationship between hedonic values & consumer intentions for each framing condition:
 ```{r}
-emtrends(full_model_1a, ~framing_condition, var = "hedonic_center", adjust = "none") %>%
+emtrends(full_model_1a, ~framing_condition, var = "hedonic_center", adjust = "tukey") %>%
   knitr::kable(digits = 2)
 ```
 
@@ -2378,7 +2376,7 @@ emmip(full_model_1a, ~ hedonic_center | framing_condition, at = at_list, CIs = T
 Is the slope of the relationship between hedonic values & consumer intentions stronger in any one of the framing conditions compared to the others?
 
 ```{r}
-hed_frame_trends <- emtrends(full_model_1a, pairwise~framing_condition, var = "hedonic_center", adjust = "none")
+hed_frame_trends <- emtrends(full_model_1a, pairwise~framing_condition, var = "hedonic_center", adjust = "tukey")
 
 hed_frame_trends$emtrends %>%
   knitr::kable(digits = 2)
@@ -2400,7 +2398,7 @@ No, there was no significant difference between any two pairs of slopes.
 
 Third, interaction between hedonic values, framing, & norm condition:
 ```{r}
-emtrends(full_model_1a, ~norm_condition | framing_condition, var = "hedonic_center", adjust = "none") %>% 
+emtrends(full_model_1a, ~norm_condition | framing_condition, var = "hedonic_center", adjust = "tukey") %>% 
   knitr::kable(digits = 2)
 ```
 
@@ -2424,7 +2422,7 @@ emmip(full_model_1a, norm_condition ~ hedonic_center | framing_condition, at = a
 
 First, relationship between ingroup identification & consumer intentions for each norm condition:
 ```{r}
-emtrends(full_model_1a, ~norm_condition, var = "ingroup_center", adjust = "none") %>%
+emtrends(full_model_1a, ~norm_condition, var = "ingroup_center", adjust = "tukey") %>%
   knitr::kable(digits = 2)
 ```
 
@@ -2448,7 +2446,7 @@ emmip(full_model_1a, ~ ingroup_center | norm_condition, at = at_list, CIs = TRUE
 Is the slope of the relationship between ingroup idenitification & consumer intentions stronger in any one of the norm conditions compared to the others?
 
 ```{r}
-ing_norm_trends <- emtrends(full_model_1a, pairwise~norm_condition, var = "ingroup_center", adjust = "none")
+ing_norm_trends <- emtrends(full_model_1a, pairwise~norm_condition, var = "ingroup_center", adjust = "tukey")
 
 ing_norm_trends$emtrends %>%
   knitr::kable(digits = 2)
@@ -2470,7 +2468,7 @@ No, there was no significant difference between any two pairs of slopes.
 
 Second, relationship between ingroup idenitification & consumer intentions for each framing condition:
 ```{r}
-emtrends(full_model_1a, ~framing_condition, var = "ingroup_center", adjust = "none") %>%
+emtrends(full_model_1a, ~framing_condition, var = "ingroup_center", adjust = "tukey") %>%
   knitr::kable(digits = 2)
 ```
 
@@ -2489,7 +2487,7 @@ emmip(full_model_1a, ~ ingroup_center | framing_condition, at = at_list, CIs = T
 Is the slope of the relationship between ingroup identification & consumer intentions stronger in any one of the framing conditions compared to the others?
 
 ```{r}
-ing_frame_trends <- emtrends(full_model_1a, pairwise~framing_condition, var = "ingroup_center", adjust = "none")
+ing_frame_trends <- emtrends(full_model_1a, pairwise~framing_condition, var = "ingroup_center", adjust = "tukey")
 
 ing_frame_trends$emtrends %>%
   knitr::kable(digits = 2)
@@ -2513,7 +2511,7 @@ No, there was no significant difference between any two pairs of slopes.
 
 Third, interaction between ingroup identification, framing, & norm condition:
 ```{r}
-emtrends(full_model_1a, ~norm_condition | framing_condition, var = "ingroup_center", adjust = "none") %>%
+emtrends(full_model_1a, ~norm_condition | framing_condition, var = "ingroup_center", adjust = "tukey") %>%
   knitr::kable(digits = 2)
 ```
 
@@ -2535,7 +2533,7 @@ emmip(full_model_1a, norm_condition ~ ingroup_center | framing_condition, at = a
 >> Exploratory RQ2: Which combination of framing and norm condition produced the strongest reductions in consumer intentions compared to the control condition?
 
 ```{r}
-cell_int_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, adjust = "none")
+cell_int_means <- emmeans(full_model_1a, pairwise ~ norm_condition*framing_condition, adjust = "tukey")
 
 cell_int_means$emmeans %>%
   knitr::kable(digits = 2)
@@ -2643,13 +2641,13 @@ wald.test(b = coef(log_model), Sigma = vcov(log_model), Terms = 27:30)
 
 ```{r}
 # on the log odds scale
-emmeans(log_model, pairwise ~ framing_condition, adjust = "none")
+emmeans(log_model, pairwise ~ framing_condition, adjust = "tukey")
 
 emmip(log_model, ~ framing_condition, CIs = TRUE, xlab = "Framing Condition", ylab = "log odds(Consumer Behaviors)")
 
 
 # using probabilities
-emmeans(log_model, pairwise ~ framing_condition, adjust = "none", regrid = "response")
+emmeans(log_model, pairwise ~ framing_condition, adjust = "tukey", regrid = "response")
 
 emmip(log_model, ~ framing_condition, CIs = TRUE, regrid = "response", xlab = "Framing Condition", ylab = "Consumer Behaviors")
 ```
@@ -2662,13 +2660,13 @@ emmip(log_model, ~ framing_condition, CIs = TRUE, regrid = "response", xlab = "F
 
 ```{r}
 # on the log odds scale
-emmeans(log_model, pairwise ~ norm_condition, adjust = "none")
+emmeans(log_model, pairwise ~ norm_condition, adjust = "tukey")
 
 emmip(log_model, ~ norm_condition, CIs = TRUE, xlab = "Norm Condition", ylab = "log odds(Consumer Behaviors)")
 
 
 # using probabilities
-emmeans(log_model, pairwise ~ norm_condition, adjust = "none", regrid = "response")
+emmeans(log_model, pairwise ~ norm_condition, adjust = "tukey", regrid = "response")
 
 emmip(log_model, ~ norm_condition, CIs = TRUE, regrid = "response", xlab = "Framing Condition", ylab = "Consumer Behaviors")
 ```
@@ -2681,13 +2679,13 @@ emmip(log_model, ~ norm_condition, CIs = TRUE, regrid = "response", xlab = "Fram
 
 ```{r}
 # on the log odds scale
-emmeans(log_model, pairwise ~ norm_condition | framing_condition, adjust = "none")
+emmeans(log_model, pairwise ~ norm_condition | framing_condition, adjust = "tukey")
 
 emmip(log_model, framing_condition ~ norm_condition, CIs = FALSE, xlab = "Norm Condition", ylab = "log odds(Consumer Behaviors)")
 
 
 # using probabilities
-emmeans(log_model, pairwise ~ norm_condition | framing_condition, adjust = "none", regrid = "response")
+emmeans(log_model, pairwise ~ norm_condition | framing_condition, adjust = "tukey", regrid = "response")
 
 emmip(log_model, framing_condition ~ norm_condition, CIs = FALSE, regrid = "response", xlab = "Framing Condition", ylab = "Consumer Behaviors")
 ```
