@@ -1,0 +1,3880 @@
+---
+title: "log_analysis_with_MI_smcfcs"
+output:
+  word_document:
+    toc: yes
+    toc_depth: '3'
+  html_document:
+    toc: yes
+    toc_depth: 3
+    toc_float: yes
+date: "2023-03-29"
+editor_options:
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+```{r clear environment, echo = FALSE}
+rm(list = ls())
+```
+
+
+```{r libraries, message = FALSE, warning = FALSE, include = FALSE}
+library(Rmisc)
+library(Hmisc)
+library(rio)
+library(tidyverse)
+library(psych)
+library(gtools) # rbinding data frames
+library(corrplot)
+library(jtools) # for pretty printing tables
+library(sjPlot) # pretty printing tables
+library(sjmisc) # pretty printing
+library(mice) # handling missing values
+library(naniar) # visualizaing missingness & MCAR test
+library(miceadds) # for mi.anova
+library(emmeans) # simple effects analyses
+library(broom)     # for extracting residuals and outlier indices
+library(olsrr)     # for creating outlier plots
+library(smcfcs) # for multiple imputation with interactions
+library(mitools) # for pooling MI results
+library(marginaleffects) # for plotting marginal means 
+library(installr)
+library(epiDisplay) # for frequency tables
+library(papaja)
+library(car)
+
+options(max.print = 100000) # max rows to print in output
+options(scipen = 1000) # turn off sci notation
+```
+
+# Data Import & Cleaning
+
+## Import data
+```{r import data}
+raw_psych_hum_subj <- import("data/raw/raw_psych_hum_subj.csv")
+raw_mktg_hum_subj <- import("data/raw/raw_mktg_hum_subj.csv")
+raw_gen_uo_pop <- import("data/raw/raw_gen_uo_pop.csv")
+pre_fall22 <- import("data/prescreen/dittersdorf_matches_f22.csv")
+pre_winter23 <- import("data/prescreen/dittersdorf_matches_w23.csv")
+pre_spring23 <- import("data/prescreen/dittersdorf_matches_s23.csv")
+participant_list <- import("data/prescreen/dittersdorf_participants.csv")
+```
+
+
+
+Fix age before converting variable types
+```{r}
+table(raw_psych_hum_subj$Age) # 18 years old = 18
+table(raw_mktg_hum_subj$Age) # 1999 = 24
+table(raw_gen_uo_pop$Age)
+
+raw_psych_hum_subj$Age[raw_psych_hum_subj$Age == "18 years old"] <- 18
+raw_mktg_hum_subj$Age[raw_mktg_hum_subj$Age == 1999] <- 24
+
+table(raw_psych_hum_subj$Age) # 18 years old = 18
+table(raw_mktg_hum_subj$Age) # 1999 = 24
+```
+
+
+
+## Combine dataframes 
+```{r update var types, warning = FALSE}
+raw_psych_hum_subj <- raw_psych_hum_subj %>%
+  mutate(Age = as.integer(Age),
+         Gender = as.factor(Gender),
+         framing_condition_DO = as.factor(framing_condition_DO),
+         norm_condition_DO = as.factor(norm_condition_DO),
+         consumer_behaviors = as.factor(consumer_behaviors),
+         skepticism = as.factor(skepticism),
+         id = as.factor(id),
+         source = strrep("psych_hsp", times = 1))
+
+levels(raw_psych_hum_subj$framing_condition_DO)
+
+raw_mktg_hum_subj <- raw_mktg_hum_subj %>%
+  mutate(Age = as.integer(Age),
+         Gender = as.factor(Gender),
+         Gender_5_TEXT = as.character(Gender_5_TEXT),
+         Class_Lvl_7_TEXT = as.character(Class_Lvl_7_TEXT),
+         Pol_Ornt_8_TEXT = as.character(Pol_Ornt_8_TEXT),
+         Ethnicity_8_TEXT = as.character(Ethnicity_8_TEXT),
+         skept_open = as.character(skept_open),
+         skepticism = as.factor(skepticism),
+         id = as.factor(id),
+         framing_condition_DO = as.factor(framing_condition_DO),
+         norm_condition_DO = as.factor(norm_condition_DO),
+         consumer_behaviors = as.factor(consumer_behaviors),
+         source = strrep("mktg_hsp", times = 1))
+
+raw_gen_uo_pop <- raw_gen_uo_pop %>%
+  mutate(Gender = as.factor(Gender),
+         Gender_5_TEXT = as.character(Gender_5_TEXT),
+         Class_Lvl_7_TEXT = as.character(Class_Lvl_7_TEXT),
+         Pol_Ornt_8_TEXT = as.character(Pol_Ornt_8_TEXT),
+         skept_open = as.character(skept_open),
+         skepticism = as.factor(skepticism),
+         id = as.factor(id),
+         framing_condition_DO = as.factor(framing_condition_DO),
+         norm_condition_DO = as.factor(norm_condition_DO),
+         consumer_behaviors = as.factor(consumer_behaviors),
+         source = strrep("gen_UO", times = 1))
+```
+
+
+Specify unique variables to combine prescreen data sets
+```{r prep prescreen dfs}
+# Create unique full_name variable
+pre_fall22$full_name <- paste(pre_fall22$first_name, pre_fall22$last_name, sep="_")
+
+pre_winter23$full_name <- paste(pre_winter23$first_name, pre_winter23$last_name, sep="_")
+
+pre_spring23$full_name <- paste(pre_spring23$first_name, pre_spring23$last_name, sep="_")
+
+participant_list$full_name <- paste(participant_list$first_name, participant_list$last_name, sep="_")
+
+# Create column indicating which data set rows came from
+
+pre_fall22 <- pre_fall22 %>%
+  mutate(term = "fall22")
+
+pre_winter23 <- pre_winter23 %>%
+  mutate(term = "winter23")
+
+pre_spring23 <- pre_spring23 %>%
+  mutate(term = "spring23")
+```
+
+
+Combine prescreen data
+```{r combine prescreen dfs}
+combine1 <- smartbind(pre_fall22, pre_winter23)
+combined_prescreen <- smartbind(combine1, pre_spring23)
+
+# nrow(pre_fall22) + nrow(pre_winter23) + nrow(pre_spring23) # n = 1167
+
+combined_prescreen_unique <- combined_prescreen[!duplicated(combined_prescreen$full_name), ] # keeps first row (fall22)
+```
+
+Subset key variables
+```{r subset key vars}
+combined_prescreen_key <- combined_prescreen_unique %>%
+  dplyr::select(full_name, term, respecting:gratification, honest:gossip)
+
+participant_list_key <- participant_list %>%
+  dplyr::select(full_name, survey_id)
+```
+
+Merge with participant list
+```{r merge participant list}
+merged_prescreen <- merge(combined_prescreen_key, participant_list_key, by = "full_name")
+```
+
+
+Rename SDR items to match
+```{r clean merged prescreen, warning = FALSE, include = FALSE}
+merged_prescreen <- merged_prescreen %>%
+  rename("lose_out" = "lose-out", 
+         "cover_up" = "cover-up",
+         "get_even" = "get-even",
+         "behind_back" = "behind-back",
+         "private_talk" = "private-talk",
+         "take_things" = "take-things",
+         "id" = "survey_id")
+```
+
+Convert variable types
+```{r}
+merged_prescreen <- merged_prescreen %>%
+  mutate(respecting = as.integer(respecting),
+         unity = as.integer(unity),
+         protecting = as.integer(protecting),
+         preventing = as.integer(preventing),
+         equality = as.integer(equality),
+         peace = as.integer(peace),
+         justice = as.integer(justice),
+         helpful = as.integer(helpful),
+         power = as.integer(power),
+         wealth = as.integer(wealth),
+         authority = as.integer(authority),
+         influential = as.integer(influential),
+         ambition = as.integer(ambition),
+         pleasures = as.integer(pleasures),
+         enjoying = as.integer(enjoying),
+         gratification = as.integer(gratification),
+         honest = as.integer(honest),
+         like = as.integer(like),
+         disturbing = as.integer(disturbing),
+         regret = as.integer(regret),
+         lose_out = as.integer(lose_out),
+         rational = as.integer(rational),
+         confident = as.integer(confident),
+         lover = as.integer(lover),
+         lies = as.integer(lies),
+         cover_up = as.integer(cover_up),
+         advantage = as.integer(advantage),
+         get_even = as.integer(get_even),
+         behind_back = as.integer(behind_back),
+         private_talk = as.integer(private_talk),
+         take_things = as.integer(take_things),
+         gossip = as.integer(gossip),
+         id = as.factor(id))
+```
+
+
+Rename values & socially desirable items in prescreen data to match names in main data:
+```{r rename prescreen vars, include = FALSE}
+merged_prescreen <- merged_prescreen %>%
+  rename("values_1" = "respecting",
+         "values_2" = "unity",
+         "values_3" = "protecting",
+         "values_4" = "preventing",
+         "values_5" = "equality",
+         "values_6" = "peace",
+         "values_7" = "justice",
+         "values_8" = "helpful",
+         "values_9" = "power",
+         "values_10" = "wealth",
+         "values_11" = "authority",
+         "values_12" = "influential",
+         "values_13" = "ambition",
+         "values_14" = "pleasures",
+         "values_15" = "enjoying",
+         "values_16" = "gratification",
+         "socially_desirable_1" = "honest",
+         "socially_desirable_2" = "like",
+         "socially_desirable_3" = "disturbing",
+         "socially_desirable_4" = "regret",
+         "socially_desirable_5" = "lose_out",
+         "socially_desirable_6" = "rational",
+         "socially_desirable_7" = "confident",
+         "socially_desirable_8" = "lover",
+         "socially_desirable_9" = "lies",
+         "socially_desirable_10" = "cover_up",
+         "socially_desirable_11" = "advantage",
+         "socially_desirable_12" = "get_even",
+         "socially_desirable_13" = "behind_back",
+         "socially_desirable_14" = "private_talk",
+         "socially_desirable_15" = "take_things",
+         "socially_desirable_16" = "gossip")
+```
+
+
+Combine all data
+
+- First, combine Psych Hum Subj data with Prescreen data based on `id`
+- Second, add Mktg Hum Subj data
+- Third, add gen UO Pop data
+```{r combine all data}
+combine1 <- merge(raw_psych_hum_subj, merged_prescreen, by = "id")
+combine2 <- smartbind(combine1, raw_mktg_hum_subj)
+combine3 <- smartbind(combine2, raw_gen_uo_pop)
+```
+
+
+## Remove duplicate cases
+
+Identify duplicate cases
+```{r id duplicate cases, results = 'hide'}
+# first, add unique row #s
+combine3 <- combine3 %>%
+  mutate(row = 1:nrow(combine3))
+
+combine3[duplicated(combine3$id),] # Only rows 1 through 858 have unique id #s
+
+# write.csv(combine3, "combined_data.csv")
+```
+
+Row IDs to remove:
+
+* 13 (participant's second time completing study)
+* 134 (participant didn't complete study first time)
+* 145 (participant didn't complete study first time)
+* 308 (participant's second time completing study)
+* 672 (participant's second time completing study)
+* 743 (participant didn't complete study first time)
+* 790 (participant didn't complete study first time)
+* 800 (participant didn't complete study first time)
+
+Remove duplicate rows after resolving:
+```{r remove duplicate cases}
+combine3 <- combine3 %>%
+  filter(!row %in% c(13, 134, 145, 308, 672, 743, 790, 800))
+```
+
+
+## Remove rows of all NAs
+
+Identify completely missing rows:
+```{r id all NA rows, results = 'hide'}
+key_vars <- combine3 %>%
+  dplyr::select(row, big_2_1:big_2_65, consumer_intentions_1:consumer_intentions_9, consumer_behaviors, clothing_interest_1:clothing_interest_20, ingroup_ident_1:ingroup_ident_14, values_1:values_16, socially_desirable_1:socially_desirable_16, source)
+
+ncol(key_vars) # number of columns - the row # & source column = 141
+
+all_NA_rows <- key_vars[rowSums(is.na(key_vars)) == 141,] # identify rows with 141 NAs (all missing values), row numbers are preserved
+
+all_NA_rows
+```
+
+Removing rows of fully missing data
+```{r remove all NA rows}
+data <- combine3 %>%
+  dplyr::filter(!row %in% c(859, 860, 900, 926, 927, 941, 1139, 1141, 1142, 1143, 1144, 1146, 1149, 1150, 1152)) %>% # remove rows containing all NAs
+  dplyr::select(-StartDate, -EndDate, -Status, -Progress, -"Duration (in seconds)", -Finished, -RecordedDate, -ResponseId, -DistributionChannel, -UserLanguage, -big_2_DO, -consumer_intentions_DO, -consumer_behaviors_DO, -clothing_interest_DO, -ingroup_ident_DO, -full_name, -code, -socially_desirable_DO, -values_DO, -email_giftcard, -term) # removing variables not in analysis
+```
+
+
+## Number per source
+```{r}
+table(data$source)
+```
+
+* 850 = psych human subjects pool
+* 276 = mktg human subjects pool
+* 7 = general UO pop
+
+
+Rename variables
+```{r rename vars}
+data <- data %>%
+  rename("framing_condition" = "framing_condition_DO", 
+         "norm_condition" = "norm_condition_DO")
+```
+
+Drop unused levels
+```{r include = FALSE}
+levels(data$framing_condition)
+levels(data$norm_condition)
+
+data$framing_condition <- droplevels(data$framing_condition)
+data$norm_condition <- droplevels(data$norm_condition)
+
+levels(data$framing_condition)
+levels(data$norm_condition)
+```
+
+
+Re-order levels of norm condition
+```{r}
+data$norm_condition <- factor(data$norm_condition, levels = c("control_norm", "descriptive_norm", "convention_norm", "social_norm", "moral_norm"))
+```
+
+
+## Inspect final data 
+```{r inspect final df, results = 'hide'}
+str(data, list.len = ncol(data))
+
+# write.csv(data, "final_data.csv")
+```
+
+
+# Aggregate Variables 
+
+## Personality
+
+### Reverse-code
+
+```{r reverse personality items}
+data_R <- data %>%
+  mutate(across(c(big_2_11,
+                  big_2_16,
+                  big_2_26,
+                  big_2_31,
+                  big_2_36,
+                  big_2_51,
+                  big_2_12,
+                  big_2_17,
+                  big_2_22,
+                  big_2_37,
+                  big_2_42,
+                  big_2_47,
+                  big_2_3,
+                  big_2_8,
+                  big_2_23,
+                  big_2_28,
+                  big_2_48,
+                  big_2_58,
+                  big_2_4,
+                  big_2_9,
+                  big_2_24,
+                  big_2_29,
+                  big_2_44,
+                  big_2_49,
+                  big_2_5,
+                  big_2_25,
+                  big_2_30,
+                  big_2_45,
+                  big_2_50,
+                  big_2_55,
+                  big_2_63), ~6 - .)) # replace '6' with the max possible value plus 1 for any particular scale
+```
+
+### Average items
+
+```{r aggregate personality}
+data_R$extraversion <- data_R %>%
+  dplyr::select(big_2_1, big_2_6, big_2_11, big_2_16, big_2_21, big_2_26, big_2_31, big_2_36, big_2_41, big_2_46, big_2_51, big_2_56) %>%
+  rowMeans(na.rm = TRUE) 
+
+
+data_R$conscientiousness <- data_R %>%
+  dplyr::select(big_2_3, big_2_8, big_2_13, big_2_18, big_2_23, big_2_28, big_2_33, big_2_38, big_2_43, big_2_48, big_2_53, big_2_58) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$agreeableness <- data_R %>%
+  dplyr::select(big_2_2, big_2_7, big_2_12, big_2_17, big_2_22, big_2_27, big_2_32, big_2_37, big_2_42, big_2_47, big_2_52, big_2_57) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$neuroticism <- data_R %>%
+  dplyr::select(big_2_4, big_2_9, big_2_14, big_2_19, big_2_24, big_2_29, big_2_34, big_2_39, big_2_44, big_2_49, big_2_54, big_2_59) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$openness <- data_R %>%
+  dplyr::select(big_2_5, big_2_10, big_2_15, big_2_20, big_2_25, big_2_30, big_2_35, big_2_40, big_2_45, big_2_50, big_2_55, big_2_60) %>%
+  rowMeans(na.rm = TRUE)
+
+
+data_R$honesty <- data_R %>%
+  dplyr::select(big_2_61, big_2_62, big_2_63, big_2_64, big_2_65) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Visually inspect
+```{r warning = FALSE}
+data_R %>%
+  dplyr::select(extraversion, agreeableness, conscientiousness, openness, neuroticism, honesty) %>%
+  hist()
+```
+
+
+## Clothing Interest
+
+### Reverse-code
+
+```{r reverse clothing items}
+data_R <- data_R %>%
+  mutate(across(c(clothing_interest_3,
+                  clothing_interest_5,
+                  clothing_interest_7,
+                  clothing_interest_9,
+                  clothing_interest_12,
+                  clothing_interest_14,
+                  clothing_interest_15,
+                  clothing_interest_16,
+                  clothing_interest_18,
+                  clothing_interest_20), ~6 - .)) # replace '#' with the max possible value plus 1 for any particular scale
+```
+
+
+### Average items
+```{r aggregate clothing interest}
+data_R$clothing_interest <- data_R %>%
+  dplyr::select(clothing_interest_1:clothing_interest_20) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+
+### Visually Inspect
+```{r}
+data_R %>%
+  dplyr::select(clothing_interest) %>%
+  hist()
+```
+
+
+
+## In-group Identification
+
+### Reverse-code
+
+No items need to be reverse-coded.
+
+### Average items
+```{r aggegate ingroup ident}
+data_R$ingroup_identification <- data_R %>%
+  dplyr::select(ingroup_ident_1:ingroup_ident_14) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Visually Inspect
+
+```{r}
+data_R %>%
+  dplyr::select(ingroup_identification) %>%
+  hist()
+```
+
+## Values
+
+### Reverse-code
+
+No items need to be reverse-coded.
+
+### Recoding scale options
+
+Recoding values:
+
+* -3 = 1
+* -2 = 2
+* -1 = 3
+* 0 = 4
+* +1 = 5
+* +2 = 6
+* +3 = 7
+
+```{r recode values}
+table(data_R$values_1)
+
+data_R$values_1_rec <- dplyr::recode(data_R$values_1, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+
+table(data_R$values_1_rec)
+
+data_R$values_2_rec <- dplyr::recode(data_R$values_2, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_3_rec <- dplyr::recode(data_R$values_3, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_4_rec <- dplyr::recode(data_R$values_4, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_5_rec <- dplyr::recode(data_R$values_5, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_6_rec <- dplyr::recode(data_R$values_6, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_7_rec <- dplyr::recode(data_R$values_7, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_8_rec <- dplyr::recode(data_R$values_8, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_9_rec <- dplyr::recode(data_R$values_9, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_10_rec <- dplyr::recode(data_R$values_10, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_11_rec <- dplyr::recode(data_R$values_11, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_12_rec <- dplyr::recode(data_R$values_12, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_13_rec <- dplyr::recode(data_R$values_13, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_14_rec <- dplyr::recode(data_R$values_14, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_15_rec <- dplyr::recode(data_R$values_15, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+data_R$values_16_rec <- dplyr::recode(data_R$values_16, `-3` = 1, `-2` = 2, `-1` = 3, `0` = 4, `1` = 5, `2` = 6, `3` = 7)
+
+table(data_R$values_16)
+table(data_R$values_16_rec)
+```
+
+
+### Average items
+```{r aggregate values}
+data_R$biospheric <- data_R %>%
+  dplyr::select(values_1_rec:values_4_rec) %>%
+  rowMeans(na.rm = TRUE)
+
+data_R$altruistic <- data_R %>%
+  dplyr::select(values_5_rec:values_8_rec) %>%
+  rowMeans(na.rm = TRUE)
+
+data_R$egoistic <- data_R %>%
+  dplyr::select(values_9_rec:values_13_rec) %>%
+  rowMeans(na.rm = TRUE)
+
+data_R$hedonic <- data_R %>%
+  dplyr::select(values_14_rec:values_16_rec) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+
+### Visually inspect
+```{r}
+values_df <- data_R %>%
+  dplyr::select(biospheric, altruistic, egoistic, hedonic)
+
+values_df %>%
+  hist()
+```
+
+### Frequency tables
+```{r}
+# Biospheric values
+tab1(values_df$biospheric, sort.group = "descending", cum.percent = TRUE, missing = FALSE, horiz = TRUE)
+
+# Altruistic values
+tab1(values_df$altruistic, sort.group = "descending", cum.percent = TRUE, missing = FALSE, horiz = TRUE)
+
+# Egoistic values
+tab1(values_df$egoistic, sort.group = "descending", cum.percent = TRUE, missing = FALSE, horiz = TRUE)
+
+# Hedonic values
+tab1(values_df$hedonic, sort.group = "descending", cum.percent = TRUE, missing = FALSE, horiz = TRUE)
+```
+
+
+
+
+## Socially Desirable Responding
+
+### Reverse-code
+```{r reverse code socially desirable items}
+data_R <- data_R %>%
+  mutate(across(c(socially_desirable_1,
+                  socially_desirable_3,
+                  socially_desirable_5,
+                  socially_desirable_8,
+                  socially_desirable_9,
+                  socially_desirable_11,
+                  socially_desirable_12,
+                  socially_desirable_13), ~8 - .)) # replace '#' with the max possible value plus 1 for any particular scale
+```
+
+### Average items
+```{r aggregate socially desirable}
+data_R$self_deceptive_sdr <- data_R %>%
+  dplyr::select(socially_desirable_1:socially_desirable_8) %>%
+  rowMeans(na.rm = TRUE)
+  
+data_R$impress_manag_sdr <- data_R %>%
+  dplyr::select(socially_desirable_9:socially_desirable_16) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Visually inspect
+
+```{r warning = FALSE}
+data_R %>%
+  dplyr::select(self_deceptive_sdr, impress_manag_sdr) %>%
+  hist()
+```
+
+
+## Consumer Intentions
+
+### Reverse-code
+
+Higher scores mean better consumer intentions (intentions to *reduce* future consumption):
+```{r reverse code consumer intentions}
+data_R <- data_R %>%
+  mutate(across(c(consumer_intentions_2,
+                  consumer_intentions_4,
+                  consumer_intentions_7,
+                  consumer_intentions_9), ~8 - .)) # replace '#' with the max possible value plus 1 for any particular scale
+```
+
+### Average items
+
+```{r aggregate consumer intentions}
+data_R$consumer_intentions <- data_R %>%
+  dplyr::select(consumer_intentions_1:consumer_intentions_9) %>%
+  rowMeans(na.rm = TRUE)
+```
+
+### Visually inspect
+
+```{r warning = FALSE}
+data_R %>%
+  dplyr::select(consumer_intentions) %>%
+  hist()
+```
+
+
+# Contrast Coding 
+
+Subset variables
+```{r echo = FALSE}
+data_R_alt <- data_R %>%
+  dplyr::select(hedonic, egoistic, altruistic, biospheric, ingroup_identification, Age, clothing_interest, self_deceptive_sdr, impress_manag_sdr, consumer_intentions, consumer_behaviors, Gender, framing_condition, norm_condition)
+```
+
+
+Contrast Coding using ifelse() approach:
+```{r alt coding}
+# Framing
+data_R_alt$FramingCode1 <- ifelse(data_R_alt$framing_condition == "control_framing", -1/2, ifelse(data_R_alt$framing_condition == "self_enh_framing", 1/2, 0))
+
+data_R_alt$FramingCode2 <- ifelse(data_R_alt$framing_condition == "pro_env_framing", 2/3, -1/3)
+
+
+# Norm
+data_R_alt$NormCode1 <- ifelse(data_R_alt$norm_condition == "moral_norm", 4, -1)
+
+data_R_alt$NormCode2 <- ifelse(data_R_alt$norm_condition == "social_norm", 3, ifelse(data_R_alt$norm_condition == "moral_norm", 0, -1))
+
+data_R_alt$NormCode3 <- ifelse(data_R_alt$norm_condition == "convention_norm", 2, ifelse(data_R_alt$norm_condition == "moral_norm", 0, ifelse(data_R_alt$norm_condition == "social_norm", 0, -1)))
+data_R_alt$NormCode4 <- ifelse(data_R_alt$norm_condition == "descriptive_norm", 1, ifelse(data_R_alt$norm_condition == "control_norm", -1, 0))
+
+
+## Adding contrast codes to Framing & Norm Condition
+# Framing
+FrameCode1 <- c(-1/2, 0, 1/2) # control vs self-enhancing
+FrameCode2 <- c(-1/3, 2/3, -1/3) # arbitrary code
+
+contrasts(data_R_alt$framing_condition) <- cbind(FrameCode1, FrameCode2)
+contrasts(data_R_alt$framing_condition)
+
+# Norm
+contrasts(data_R_alt$norm_condition) <- contr.helmert(5)
+contrasts(data_R_alt$norm_condition) # control vs DN
+
+# Gender
+levels(data_R_alt$Gender) <- c("Woman", "Man", "Non-binary", "I prefer not to identify", "Other")
+
+data_R_alt$Gender[data_R_alt$Gender == "Non-binary"] <- NA
+data_R_alt$Gender[data_R_alt$Gender == "I prefer not to identify"] <- NA
+data_R_alt$Gender[data_R_alt$Gender == "Other"] <- NA
+
+data_R_alt$Gender <- droplevels(data_R_alt$Gender)
+
+contrasts(data_R_alt$Gender) <- c(1, 0)
+levels(data_R_alt$Gender)
+```
+
+Coding consumer_behaviors 0/1 and numeric because required by smcfcs imputation function:
+```{r}
+data_R_alt$consumer_behaviors <- as.numeric(data_R_alt$consumer_behaviors)
+
+data_R_alt$consumer_behaviors <- ifelse(data_R_alt$consumer_behaviors == 1, 0, 1)
+```
+
+
+# Multiple Imputation 
+
+## Examine Missingness
+
+Examine missingness:
+```{r}
+data_R_alt %>%
+  vis_miss()
+```
+
+Variables with NO missing data:
+
+* ingroup_identification
+* clothing_interest
+* consumer_intentions
+* framing_condition
+* norm_condition
+
+## Adding interaction terms
+
+```{r include = FALSE}
+data_R_alt <- data_R_alt %>%
+  mutate(framing1Xbiospheric = (FramingCode1)*(biospheric),
+         framing2Xbiospheric = (FramingCode2)*(biospheric),
+         norm1Xbiospheric = (NormCode1)*(biospheric),
+         norm2Xbiospheric = (NormCode2)*(biospheric),
+         norm3Xbiospheric = (NormCode3)*(biospheric),
+         norm4Xbiospheric = (NormCode4)*(biospheric),
+         framing1Xnorm1Xbiospheric = (FramingCode1)*(NormCode1)*(biospheric),
+         framing1Xnorm2Xbiospheric = (FramingCode1)*(NormCode2)*(biospheric),
+         framing1Xnorm3Xbiospheric = (FramingCode1)*(NormCode3)*(biospheric),
+         framing1Xnorm4Xbiospheric = (FramingCode1)*(NormCode4)*(biospheric),
+         framing2Xnorm1Xbiospheric = (FramingCode2)*(NormCode1)*(biospheric),
+         framing2Xnorm2Xbiospheric = (FramingCode2)*(NormCode2)*(biospheric),
+         framing2Xnorm3Xbiospheric = (FramingCode2)*(NormCode3)*(biospheric),
+         framing2Xnorm4Xbiospheric = (FramingCode2)*(NormCode4)*(biospheric),
+         
+         framing1Xaltruistic = (FramingCode1)*(altruistic),
+         framing2Xaltruistic = (FramingCode2)*(altruistic),
+         norm1Xaltruistic = (NormCode1)*(altruistic),
+         norm2Xaltruistic = (NormCode2)*(altruistic),
+         norm3Xaltruistic = (NormCode3)*(altruistic),
+         norm4Xaltruistic = (NormCode4)*(altruistic),
+         framing1Xnorm1Xaltruistic = (FramingCode1)*(NormCode1)*(altruistic),
+         framing1Xnorm2Xaltruistic = (FramingCode1)*(NormCode2)*(altruistic),
+         framing1Xnorm3Xaltruistic = (FramingCode1)*(NormCode3)*(altruistic),
+         framing1Xnorm4Xaltruistic = (FramingCode1)*(NormCode4)*(altruistic),
+         framing2Xnorm1Xaltruistic = (FramingCode2)*(NormCode1)*(altruistic),
+         framing2Xnorm2Xaltruistic = (FramingCode2)*(NormCode2)*(altruistic),
+         framing2Xnorm3Xaltruistic = (FramingCode2)*(NormCode3)*(altruistic),
+         framing2Xnorm4Xaltruistic = (FramingCode2)*(NormCode4)*(altruistic),
+         
+         framing1Xegoistic = (FramingCode1)*(egoistic),
+         framing2Xegoistic = (FramingCode2)*(egoistic),
+         norm1Xegoistic = (NormCode1)*(egoistic),
+         norm2Xegoistic = (NormCode2)*(egoistic),
+         norm3Xegoistic = (NormCode3)*(egoistic),
+         norm4Xegoistic = (NormCode4)*(egoistic),
+         framing1Xnorm1Xegoistic = (FramingCode1)*(NormCode1)*(egoistic),
+         framing1Xnorm2Xegoistic = (FramingCode1)*(NormCode2)*(egoistic),
+         framing1Xnorm3Xegoistic = (FramingCode1)*(NormCode3)*(egoistic),
+         framing1Xnorm4Xegoistic = (FramingCode1)*(NormCode4)*(egoistic),
+         framing2Xnorm1Xegoistic = (FramingCode2)*(NormCode1)*(egoistic),
+         framing2Xnorm2Xegoistic = (FramingCode2)*(NormCode2)*(egoistic),
+         framing2Xnorm3Xegoistic = (FramingCode2)*(NormCode3)*(egoistic),
+         framing2Xnorm4Xegoistic = (FramingCode2)*(NormCode4)*(egoistic),
+         
+         framing1Xhedonic = (FramingCode1)*(hedonic),
+         framing2Xhedonic = (FramingCode2)*(hedonic),
+         norm1Xhedonic = (NormCode1)*(hedonic),
+         norm2Xhedonic = (NormCode2)*(hedonic),
+         norm3Xhedonic = (NormCode3)*(hedonic),
+         norm4Xhedonic = (NormCode4)*(hedonic),
+         framing1Xnorm1Xhedonic = (FramingCode1)*(NormCode1)*(hedonic),
+         framing1Xnorm2Xhedonic = (FramingCode1)*(NormCode2)*(hedonic),
+         framing1Xnorm3Xhedonic = (FramingCode1)*(NormCode3)*(hedonic),
+         framing1Xnorm4Xhedonic = (FramingCode1)*(NormCode4)*(hedonic),
+         framing2Xnorm1Xhedonic = (FramingCode2)*(NormCode1)*(hedonic),
+         framing2Xnorm2Xhedonic = (FramingCode2)*(NormCode2)*(hedonic),
+         framing2Xnorm3Xhedonic = (FramingCode2)*(NormCode3)*(hedonic),
+         framing2Xnorm4Xhedonic = (FramingCode2)*(NormCode4)*(hedonic),
+         
+         framing1Xingroup = (FramingCode1)*(ingroup_identification),
+         framing2Xingroup = (FramingCode2)*(ingroup_identification),
+         norm1Xingroup = (NormCode1)*(ingroup_identification),
+         norm2Xingroup = (NormCode2)*(ingroup_identification),
+         norm3Xingroup = (NormCode3)*(ingroup_identification),
+         norm4Xingroup = (NormCode4)*(ingroup_identification),
+         framing1Xnorm1Xingroup = (FramingCode1)*(NormCode1)*(ingroup_identification),
+         framing1Xnorm2Xingroup = (FramingCode1)*(NormCode2)*(ingroup_identification),
+         framing1Xnorm3Xingroup = (FramingCode1)*(NormCode3)*(ingroup_identification),
+         framing1Xnorm4Xingroup = (FramingCode1)*(NormCode4)*(ingroup_identification),
+         framing2Xnorm1Xingroup = (FramingCode2)*(NormCode1)*(ingroup_identification),
+         framing2Xnorm2Xingroup = (FramingCode2)*(NormCode2)*(ingroup_identification),
+         framing2Xnorm3Xingroup = (FramingCode2)*(NormCode3)*(ingroup_identification),
+         framing2Xnorm4Xingroup = (FramingCode2)*(NormCode4)*(ingroup_identification))
+```
+
+
+
+## Imputation Model
+
+```{r}
+set.seed(114950518)
+```
+
+```{r echo = FALSE}
+imps <- smcfcs(data_R_alt, 
+               smtype = "logistic", 
+               smformula = "consumer_behaviors ~ framing_condition + norm_condition + framing_condition*norm_condition + ingroup_identification + framing1Xingroup + framing2Xingroup + norm1Xingroup + norm2Xingroup + norm3Xingroup + norm4Xingroup + framing1Xnorm1Xingroup + framing1Xnorm2Xingroup + framing1Xnorm3Xingroup + framing1Xnorm4Xingroup + framing2Xnorm1Xingroup + framing2Xnorm2Xingroup + framing2Xnorm3Xingroup + framing2Xnorm4Xingroup + consumer_intentions + clothing_interest + self_deceptive_sdr + impress_manag_sdr + biospheric + framing1Xbiospheric + framing2Xbiospheric + norm1Xbiospheric + norm2Xbiospheric + norm3Xbiospheric + norm4Xbiospheric + framing1Xnorm1Xbiospheric + framing1Xnorm2Xbiospheric + framing1Xnorm3Xbiospheric + framing1Xnorm4Xbiospheric + framing2Xnorm1Xbiospheric + framing2Xnorm2Xbiospheric + framing2Xnorm3Xbiospheric + framing2Xnorm4Xbiospheric + altruistic + framing1Xaltruistic + framing2Xaltruistic + norm1Xaltruistic + norm2Xaltruistic + norm3Xaltruistic + norm4Xaltruistic + framing1Xnorm1Xaltruistic + framing1Xnorm2Xaltruistic + framing1Xnorm3Xaltruistic + framing1Xnorm4Xaltruistic + framing2Xnorm1Xaltruistic + framing2Xnorm2Xaltruistic + framing2Xnorm3Xaltruistic + framing2Xnorm4Xaltruistic + egoistic + framing1Xegoistic + framing2Xegoistic + norm1Xegoistic + norm2Xegoistic + norm3Xegoistic + norm4Xegoistic + framing1Xnorm1Xegoistic + framing1Xnorm2Xegoistic + framing1Xnorm3Xegoistic + framing1Xnorm4Xegoistic + framing2Xnorm1Xegoistic + framing2Xnorm2Xegoistic + framing2Xnorm3Xegoistic + framing2Xnorm4Xegoistic + hedonic + framing1Xhedonic + framing2Xhedonic + norm1Xhedonic + norm2Xhedonic + norm3Xhedonic + norm4Xhedonic + framing1Xnorm1Xhedonic + framing1Xnorm2Xhedonic + framing1Xnorm3Xhedonic + framing1Xnorm4Xhedonic + framing2Xnorm1Xhedonic + framing2Xnorm2Xhedonic + framing2Xnorm3Xhedonic + framing2Xnorm4Xhedonic + consumer_intentions + Gender + Age", 
+               method = c("norm","norm","norm","norm","","norm","","norm","norm","","","logreg","","","","","","","","","FramingCode1*biospheric","FramingCode2*biospheric","NormCode1*biospheric","NormCode2*biospheric","NormCode3*biospheric","NormCode4*biospheric","FramingCode1*NormCode1*biospheric","FramingCode1*NormCode2*biospheric","FramingCode1*NormCode3*biospheric","FramingCode1*NormCode4*biospheric","FramingCode2*NormCode1*biospheric","FramingCode2*NormCode2*biospheric","FramingCode2*NormCode3*biospheric","FramingCode2*NormCode4*biospheric","FramingCode1*altruistic","FramingCode2*altruistic","NormCode1*altruistic","NormCode2*altruistic","NormCode3*altruistic","NormCode4*altruistic","FramingCode1*NormCode1*altruistic","FramingCode1*NormCode2*altruistic","FramingCode1*NormCode3*altruistic","FramingCode1*NormCode4*altruistic","FramingCode2*NormCode1*altruistic","FramingCode2*NormCode2*altruistic","FramingCode2*NormCode3*altruistic","FramingCode2*NormCode4*altruistic","FramingCode1*egoistic","FramingCode2*egoistic","NormCode1*egoistic","NormCode2*egoistic","NormCode3*egoistic","NormCode4*egoistic","FramingCode1*NormCode1*egoistic","FramingCode1*NormCode2*egoistic","FramingCode1*NormCode3*egoistic","FramingCode1*NormCode4*egoistic","FramingCode2*NormCode1*egoistic","FramingCode2*NormCode2*egoistic","FramingCode2*NormCode3*egoistic","FramingCode2*NormCode4*egoistic","FramingCode1*hedonic","FramingCode2*hedonic","NormCode1*hedonic","NormCode2*hedonic","NormCode3*hedonic","NormCode4*hedonic","FramingCode1*NormCode1*hedonic","FramingCode1*NormCode2*hedonic","FramingCode1*NormCode3*hedonic","FramingCode1*NormCode4*hedonic","FramingCode2*NormCode1*hedonic","FramingCode2*NormCode2*hedonic","FramingCode2*NormCode3*hedonic","FramingCode2*NormCode4*hedonic","","","","","","","","","","","","","",""))
+```
+
+
+Storing imputed data sets
+```{r}
+impobject <- imputationList(imps$impDatasets)
+```
+
+
+Restrict range of values on imputed variables
+```{r}
+# bio values
+impobject$imputations[[1]]$biospheric <- ifelse(impobject$imputations[[1]]$biospheric > 7, 7, impobject$imputations[[1]]$biospheric)
+
+impobject$imputations[[2]]$biospheric <- ifelse(impobject$imputations[[2]]$biospheric > 7, 7, impobject$imputations[[2]]$biospheric)
+
+impobject$imputations[[3]]$biospheric <- ifelse(impobject$imputations[[3]]$biospheric > 7, 7, impobject$imputations[[3]]$biospheric)
+
+impobject$imputations[[4]]$biospheric <- ifelse(impobject$imputations[[4]]$biospheric > 7, 7, impobject$imputations[[4]]$biospheric)
+
+impobject$imputations[[5]]$biospheric <- ifelse(impobject$imputations[[5]]$biospheric > 7, 7, impobject$imputations[[5]]$biospheric)
+
+
+# alt values
+impobject$imputations[[1]]$altruistic <- ifelse(impobject$imputations[[1]]$altruistic > 7, 7, impobject$imputations[[1]]$altruistic)
+
+impobject$imputations[[2]]$altruistic <- ifelse(impobject$imputations[[2]]$altruistic > 7, 7, impobject$imputations[[2]]$altruistic)
+
+impobject$imputations[[3]]$altruistic <- ifelse(impobject$imputations[[3]]$altruistic > 7, 7, impobject$imputations[[3]]$altruistic)
+
+impobject$imputations[[4]]$altruistic <- ifelse(impobject$imputations[[4]]$altruistic > 7, 7, impobject$imputations[[4]]$altruistic)
+
+impobject$imputations[[5]]$altruistic <- ifelse(impobject$imputations[[5]]$altruistic > 7, 7, impobject$imputations[[5]]$altruistic)
+
+
+# ego values
+impobject$imputations[[1]]$egoistic <- ifelse(impobject$imputations[[1]]$egoistic > 7, 7, impobject$imputations[[1]]$egoistic)
+
+impobject$imputations[[2]]$egoistic <- ifelse(impobject$imputations[[2]]$egoistic > 7, 7, impobject$imputations[[2]]$egoistic)
+
+impobject$imputations[[3]]$egoistic <- ifelse(impobject$imputations[[3]]$egoistic > 7, 7, impobject$imputations[[3]]$egoistic)
+
+impobject$imputations[[4]]$egoistic <- ifelse(impobject$imputations[[4]]$egoistic > 7, 7, impobject$imputations[[4]]$egoistic)
+
+impobject$imputations[[5]]$egoistic <- ifelse(impobject$imputations[[5]]$egoistic > 7, 7, impobject$imputations[[5]]$egoistic)
+
+
+# hed values
+impobject$imputations[[1]]$hedonic <- ifelse(impobject$imputations[[1]]$hedonic > 7, 7, impobject$imputations[[1]]$hedonic)
+
+impobject$imputations[[2]]$hedonic <- ifelse(impobject$imputations[[2]]$hedonic > 7, 7, impobject$imputations[[2]]$hedonic)
+
+impobject$imputations[[3]]$hedonic <- ifelse(impobject$imputations[[3]]$hedonic > 7, 7, impobject$imputations[[3]]$hedonic)
+
+impobject$imputations[[4]]$hedonic <- ifelse(impobject$imputations[[4]]$hedonic > 7, 7, impobject$imputations[[4]]$hedonic)
+
+impobject$imputations[[5]]$hedonic <- ifelse(impobject$imputations[[5]]$hedonic > 7, 7, impobject$imputations[[5]]$hedonic)
+
+
+# self-deceptive enhancement
+with(impobject, describe(self_deceptive_sdr))
+
+impobject$imputations[[4]]$self_deceptive_sdr <- ifelse(impobject$imputations[[4]]$self_deceptive_sdr < 1, 1, impobject$imputations[[4]]$self_deceptive_sdr)
+
+
+# impr manag
+with(impobject, describe(impress_manag_sdr))
+
+# Age
+describe(data_R_alt$Age)
+with(impobject, describe(Age))
+
+impobject$imputations[[1]]$Age <- ifelse(impobject$imputations[[1]]$Age < 18, 18, impobject$imputations[[1]]$Age)
+
+impobject$imputations[[2]]$Age <- ifelse(impobject$imputations[[2]]$Age < 18, 18, impobject$imputations[[2]]$Age)
+
+impobject$imputations[[3]]$Age <- ifelse(impobject$imputations[[3]]$Age < 18, 18, impobject$imputations[[3]]$Age)
+
+impobject$imputations[[4]]$Age <- ifelse(impobject$imputations[[4]]$Age < 18, 18, impobject$imputations[[4]]$Age)
+
+impobject$imputations[[5]]$Age <- ifelse(impobject$imputations[[5]]$Age < 18, 18, impobject$imputations[[5]]$Age)
+```
+
+
+### Centering continuous predictors
+```{r}
+# Biospheric values
+impobject$imputations[[1]]$biospheric_center <- impobject$imputations[[1]]$biospheric - mean(impobject$imputations[[1]]$biospheric)
+
+impobject$imputations[[2]]$biospheric_center <- impobject$imputations[[2]]$biospheric - mean(impobject$imputations[[2]]$biospheric)
+
+impobject$imputations[[3]]$biospheric_center <- impobject$imputations[[3]]$biospheric - mean(impobject$imputations[[3]]$biospheric)
+
+impobject$imputations[[4]]$biospheric_center <- impobject$imputations[[4]]$biospheric - mean(impobject$imputations[[4]]$biospheric)
+
+impobject$imputations[[5]]$biospheric_center <- impobject$imputations[[5]]$biospheric - mean(impobject$imputations[[5]]$biospheric)
+
+
+# Altruistic values
+impobject$imputations[[1]]$altruistic_center <- impobject$imputations[[1]]$altruistic - mean(impobject$imputations[[1]]$altruistic)
+
+impobject$imputations[[2]]$altruistic_center <- impobject$imputations[[2]]$altruistic - mean(impobject$imputations[[2]]$altruistic)
+
+impobject$imputations[[3]]$altruistic_center <- impobject$imputations[[3]]$altruistic - mean(impobject$imputations[[3]]$altruistic)
+
+impobject$imputations[[4]]$altruistic_center <- impobject$imputations[[4]]$altruistic - mean(impobject$imputations[[4]]$altruistic)
+
+impobject$imputations[[5]]$altruistic_center <- impobject$imputations[[5]]$altruistic - mean(impobject$imputations[[5]]$altruistic)
+
+
+# Egoistic values
+impobject$imputations[[1]]$egoistic_center <- impobject$imputations[[1]]$egoistic - mean(impobject$imputations[[1]]$egoistic)
+
+impobject$imputations[[2]]$egoistic_center <- impobject$imputations[[2]]$egoistic - mean(impobject$imputations[[2]]$egoistic)
+
+impobject$imputations[[3]]$egoistic_center <- impobject$imputations[[3]]$egoistic - mean(impobject$imputations[[3]]$egoistic)
+
+impobject$imputations[[4]]$egoistic_center <- impobject$imputations[[4]]$egoistic - mean(impobject$imputations[[4]]$egoistic)
+
+impobject$imputations[[5]]$egoistic_center <- impobject$imputations[[5]]$egoistic - mean(impobject$imputations[[5]]$egoistic)
+
+
+# Hedonic values
+impobject$imputations[[1]]$hedonic_center <- impobject$imputations[[1]]$hedonic - mean(impobject$imputations[[1]]$hedonic)
+
+impobject$imputations[[2]]$hedonic_center <- impobject$imputations[[2]]$hedonic - mean(impobject$imputations[[2]]$hedonic)
+
+impobject$imputations[[3]]$hedonic_center <- impobject$imputations[[3]]$hedonic - mean(impobject$imputations[[3]]$hedonic)
+
+impobject$imputations[[4]]$hedonic_center <- impobject$imputations[[4]]$hedonic - mean(impobject$imputations[[4]]$hedonic)
+
+impobject$imputations[[5]]$hedonic_center <- impobject$imputations[[5]]$hedonic - mean(impobject$imputations[[5]]$hedonic)
+
+
+
+# Ingroup identification
+impobject$imputations[[1]]$ingroup_center <- impobject$imputations[[1]]$ingroup_identification - mean(impobject$imputations[[1]]$ingroup_identification)
+
+impobject$imputations[[2]]$ingroup_center <- impobject$imputations[[2]]$ingroup_identification - mean(impobject$imputations[[2]]$ingroup_identification)
+
+impobject$imputations[[3]]$ingroup_center <- impobject$imputations[[3]]$ingroup_identification - mean(impobject$imputations[[3]]$ingroup_identification)
+
+impobject$imputations[[4]]$ingroup_center <- impobject$imputations[[4]]$ingroup_identification - mean(impobject$imputations[[4]]$ingroup_identification)
+
+impobject$imputations[[5]]$ingroup_center <- impobject$imputations[[5]]$ingroup_identification - mean(impobject$imputations[[5]]$ingroup_identification)
+
+
+# Age
+impobject$imputations[[1]]$Age_center <- impobject$imputations[[1]]$Age - mean(impobject$imputations[[1]]$Age)
+
+impobject$imputations[[2]]$Age_center <- impobject$imputations[[2]]$Age - mean(impobject$imputations[[2]]$Age)
+
+impobject$imputations[[3]]$Age_center <- impobject$imputations[[3]]$Age - mean(impobject$imputations[[3]]$Age)
+
+impobject$imputations[[4]]$Age_center <- impobject$imputations[[4]]$Age - mean(impobject$imputations[[4]]$Age)
+
+impobject$imputations[[5]]$Age_center <- impobject$imputations[[5]]$Age - mean(impobject$imputations[[5]]$Age)
+
+
+
+# Clothing interest
+impobject$imputations[[1]]$clothing_center <- impobject$imputations[[1]]$clothing_interest - mean(impobject$imputations[[1]]$clothing_interest)
+
+impobject$imputations[[2]]$clothing_center <- impobject$imputations[[2]]$clothing_interest - mean(impobject$imputations[[2]]$clothing_interest)
+
+impobject$imputations[[3]]$clothing_center <- impobject$imputations[[3]]$clothing_interest - mean(impobject$imputations[[3]]$clothing_interest)
+
+impobject$imputations[[4]]$clothing_center <- impobject$imputations[[4]]$clothing_interest - mean(impobject$imputations[[4]]$clothing_interest)
+
+impobject$imputations[[5]]$clothing_center <- impobject$imputations[[5]]$clothing_interest - mean(impobject$imputations[[5]]$clothing_interest)
+
+
+
+# Self deceptive SDR
+impobject$imputations[[1]]$self_dec_center <- impobject$imputations[[1]]$self_deceptive_sdr - mean(impobject$imputations[[1]]$self_deceptive_sdr)
+
+impobject$imputations[[2]]$self_dec_center <- impobject$imputations[[2]]$self_deceptive_sdr - mean(impobject$imputations[[2]]$self_deceptive_sdr)
+
+impobject$imputations[[3]]$self_dec_center <- impobject$imputations[[3]]$self_deceptive_sdr - mean(impobject$imputations[[3]]$self_deceptive_sdr)
+
+impobject$imputations[[4]]$self_dec_center <- impobject$imputations[[4]]$self_deceptive_sdr - mean(impobject$imputations[[4]]$self_deceptive_sdr)
+
+impobject$imputations[[5]]$self_dec_center <- impobject$imputations[[5]]$self_deceptive_sdr - mean(impobject$imputations[[5]]$self_deceptive_sdr)
+
+
+# Impression management SDR
+impobject$imputations[[1]]$impress_manag_center <- impobject$imputations[[1]]$impress_manag_sdr - mean(impobject$imputations[[1]]$impress_manag_sdr)
+
+impobject$imputations[[2]]$impress_manag_center <- impobject$imputations[[2]]$impress_manag_sdr - mean(impobject$imputations[[2]]$impress_manag_sdr)
+
+impobject$imputations[[3]]$impress_manag_center <- impobject$imputations[[3]]$impress_manag_sdr - mean(impobject$imputations[[3]]$impress_manag_sdr)
+
+impobject$imputations[[4]]$impress_manag_center <- impobject$imputations[[4]]$impress_manag_sdr - mean(impobject$imputations[[4]]$impress_manag_sdr)
+
+impobject$imputations[[5]]$impress_manag_center <- impobject$imputations[[5]]$impress_manag_sdr - mean(impobject$imputations[[5]]$impress_manag_sdr)
+
+# Coding Gender
+contrasts(impobject$imputations[[1]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[2]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[3]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[4]]$Gender) <- c(1/2, -1/2)
+contrasts(impobject$imputations[[5]]$Gender) <- c(1/2, -1/2)
+```
+
+
+
+Convert `scmfcs` object to a `mids` object (to make the object compatible with `mice`, and thus, `emmeans`):
+```{r}
+mids_obj <- datlist2mids(impobject)
+```
+
+Complete data set:
+```{r complete imputed data set, include = FALSE}
+complete_data <- complete(mids_obj, "long")
+```
+
+
+# Descriptive Statistics
+```{r}
+freqs <- with(mids_obj, table(consumer_behaviors))
+freqs$analyses
+
+props1 <- with(mids_obj, prop.table(table(consumer_behaviors)))
+props1$analyses
+```
+
+
+
+
+# Logistic Analysis (DV = Consumer Behaviors)
+
+Consumer Behaviors
+
+* 0 = New Clothing
+* 1 = Secondhand Clothing
+
+
+## Running Model
+```{r echo = FALSE}
+log_mice <- with(mids_obj, glm(consumer_behaviors ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, family = "binomial"))
+```
+
+```{r}
+log_pool_obj <- pool(log_mice)
+```
+
+```{r include = FALSE}
+log_mice
+```
+
+* df_residual = 1038
+* residual deviance: 1329
+
+## Model Summary
+
+Full summary
+```{r include = FALSE}
+log_summ_pool <- summary(pool(log_mice))
+log_summ_pool
+```
+
+
+## Pooled Regression Results
+
+```{r}
+summary(pool(log_mice)) %>%
+  knitr::kable(digits = 3)
+```
+
+APA-style table
+```{r}
+pool_summ <- summary(pool(log_mice))
+
+apa_table(pool_summ,
+          caption = "Pooled Logistic Regression Results",
+          note = "DV = Consumer Behaviors")
+```
+
+
+### Odds Ratios
+
+Converting log odds estimates to odds ratios:
+```{r}
+ORs_pool <- cbind(log_summ_pool$term, exp(log_summ_pool$estimate))
+
+ORs_pool %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+## Pooled Anova Results
+
+Using Anova()
+```{r include = FALSE, echo = FALSE, warning = FALSE}
+anova_mod2 <- with(mids_obj, Anova(glm(consumer_behaviors ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, family = "binomial"), type = "III"))
+```
+
+doesn't have a pooling option
+```{r}
+# anova_mod2
+```
+
+### Imputed data 1
+```{r}
+imp1_log <- anova_mod2$analyses[[1]]
+
+imp1_log %>%
+  knitr::kable(digits = c(2,2,3))
+
+imp1_log
+```
+
+### Imputed data 2
+```{r}
+anova_mod2$analyses[[2]] %>%
+  knitr::kable(digits = c(2,2,3))
+```
+
+### Imputed data 3
+```{r}
+anova_mod2$analyses[[3]] %>%
+  knitr::kable(digits = c(2,2,3))
+```
+
+### Imputed data 4
+```{r}
+anova_mod2$analyses[[4]] %>%
+  knitr::kable(digits = c(2,2,3))
+```
+
+### Imputed data 5
+```{r}
+anova_mod2$analyses[[5]] %>%
+  knitr::kable(digits = c(2,2,3))
+```
+
+
+### Main Effects
+
+Framing 
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[1]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[1]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[1]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[1]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[1]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[1]]
+df2 <- anova_mod2$analyses[[2]]$Df[[1]]
+df3 <- anova_mod2$analyses[[3]]$Df[[1]]
+df4 <- anova_mod2$analyses[[4]]$Df[[1]]
+df5 <- anova_mod2$analyses[[5]]$Df[[1]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+Norm
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[2]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[2]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[2]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[2]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[2]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[2]]
+df2 <- anova_mod2$analyses[[2]]$Df[[2]]
+df3 <- anova_mod2$analyses[[3]]$Df[[2]]
+df4 <- anova_mod2$analyses[[4]]$Df[[2]]
+df5 <- anova_mod2$analyses[[5]]$Df[[2]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+Biospheric
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[3]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[3]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[3]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[3]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[3]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[3]]
+df2 <- anova_mod2$analyses[[2]]$Df[[3]]
+df3 <- anova_mod2$analyses[[3]]$Df[[3]]
+df4 <- anova_mod2$analyses[[4]]$Df[[3]]
+df5 <- anova_mod2$analyses[[5]]$Df[[3]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+Altruistic
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[4]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[4]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[4]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[4]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[4]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[4]]
+df2 <- anova_mod2$analyses[[2]]$Df[[4]]
+df3 <- anova_mod2$analyses[[3]]$Df[[4]]
+df4 <- anova_mod2$analyses[[4]]$Df[[4]]
+df5 <- anova_mod2$analyses[[5]]$Df[[4]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+Egoistic
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[5]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[5]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[5]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[5]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[5]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[5]]
+df2 <- anova_mod2$analyses[[2]]$Df[[5]]
+df3 <- anova_mod2$analyses[[3]]$Df[[5]]
+df4 <- anova_mod2$analyses[[4]]$Df[[5]]
+df5 <- anova_mod2$analyses[[5]]$Df[[5]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+Hedonic
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[6]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[6]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[6]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[6]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[6]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[6]]
+df2 <- anova_mod2$analyses[[2]]$Df[[6]]
+df3 <- anova_mod2$analyses[[3]]$Df[[6]]
+df4 <- anova_mod2$analyses[[4]]$Df[[6]]
+df5 <- anova_mod2$analyses[[5]]$Df[[6]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+Ingroup
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[7]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[7]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[7]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[7]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[7]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[7]]
+df2 <- anova_mod2$analyses[[2]]$Df[[7]]
+df3 <- anova_mod2$analyses[[3]]$Df[[7]]
+df4 <- anova_mod2$analyses[[4]]$Df[[7]]
+df5 <- anova_mod2$analyses[[5]]$Df[[7]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+Self-deceptive enhancement
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[8]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[8]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[8]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[8]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[8]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[8]]
+df2 <- anova_mod2$analyses[[2]]$Df[[8]]
+df3 <- anova_mod2$analyses[[3]]$Df[[8]]
+df4 <- anova_mod2$analyses[[4]]$Df[[8]]
+df5 <- anova_mod2$analyses[[5]]$Df[[8]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+Impression management
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[9]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[9]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[9]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[9]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[9]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[9]]
+df2 <- anova_mod2$analyses[[2]]$Df[[9]]
+df3 <- anova_mod2$analyses[[3]]$Df[[9]]
+df4 <- anova_mod2$analyses[[4]]$Df[[9]]
+df5 <- anova_mod2$analyses[[5]]$Df[[9]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+Clothing interest
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[10]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[10]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[10]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[10]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[10]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[10]]
+df2 <- anova_mod2$analyses[[2]]$Df[[10]]
+df3 <- anova_mod2$analyses[[3]]$Df[[10]]
+df4 <- anova_mod2$analyses[[4]]$Df[[10]]
+df5 <- anova_mod2$analyses[[5]]$Df[[10]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+Gender
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[11]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[11]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[11]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[11]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[11]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[11]]
+df2 <- anova_mod2$analyses[[2]]$Df[[11]]
+df3 <- anova_mod2$analyses[[3]]$Df[[11]]
+df4 <- anova_mod2$analyses[[4]]$Df[[11]]
+df5 <- anova_mod2$analyses[[5]]$Df[[11]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+Age
+```{r}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[12]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[12]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[12]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[12]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[12]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[12]]
+df2 <- anova_mod2$analyses[[2]]$Df[[12]]
+df3 <- anova_mod2$analyses[[3]]$Df[[12]]
+df4 <- anova_mod2$analyses[[4]]$Df[[12]]
+df5 <- anova_mod2$analyses[[5]]$Df[[12]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+### Interaction effects
+
+FramingXNorm Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[13]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[13]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[13]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[13]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[13]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[13]]
+df2 <- anova_mod2$analyses[[2]]$Df[[13]]
+df3 <- anova_mod2$analyses[[3]]$Df[[13]]
+df4 <- anova_mod2$analyses[[4]]$Df[[13]]
+df5 <- anova_mod2$analyses[[5]]$Df[[13]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+FramingXBio Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[14]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[14]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[14]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[14]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[14]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[14]]
+df2 <- anova_mod2$analyses[[2]]$Df[[14]]
+df3 <- anova_mod2$analyses[[3]]$Df[[14]]
+df4 <- anova_mod2$analyses[[4]]$Df[[14]]
+df5 <- anova_mod2$analyses[[5]]$Df[[14]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+NormXBio Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[15]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[15]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[15]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[15]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[15]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[15]]
+df2 <- anova_mod2$analyses[[2]]$Df[[15]]
+df3 <- anova_mod2$analyses[[3]]$Df[[15]]
+df4 <- anova_mod2$analyses[[4]]$Df[[15]]
+df5 <- anova_mod2$analyses[[5]]$Df[[15]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+
+FrameXAlt Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[16]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[16]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[16]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[16]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[16]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[16]]
+df2 <- anova_mod2$analyses[[2]]$Df[[16]]
+df3 <- anova_mod2$analyses[[3]]$Df[[16]]
+df4 <- anova_mod2$analyses[[4]]$Df[[16]]
+df5 <- anova_mod2$analyses[[5]]$Df[[16]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+NormXAlt Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[17]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[17]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[17]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[17]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[17]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[17]]
+df2 <- anova_mod2$analyses[[2]]$Df[[17]]
+df3 <- anova_mod2$analyses[[3]]$Df[[17]]
+df4 <- anova_mod2$analyses[[4]]$Df[[17]]
+df5 <- anova_mod2$analyses[[5]]$Df[[17]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+
+FrameXEgo Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[18]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[18]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[18]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[18]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[18]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[18]]
+df2 <- anova_mod2$analyses[[2]]$Df[[18]]
+df3 <- anova_mod2$analyses[[3]]$Df[[18]]
+df4 <- anova_mod2$analyses[[4]]$Df[[18]]
+df5 <- anova_mod2$analyses[[5]]$Df[[18]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+NormxEgo Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[19]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[19]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[19]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[19]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[19]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[19]]
+df2 <- anova_mod2$analyses[[2]]$Df[[19]]
+df3 <- anova_mod2$analyses[[3]]$Df[[19]]
+df4 <- anova_mod2$analyses[[4]]$Df[[19]]
+df5 <- anova_mod2$analyses[[5]]$Df[[19]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+FrameXHed Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[20]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[20]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[20]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[20]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[20]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[20]]
+df2 <- anova_mod2$analyses[[2]]$Df[[20]]
+df3 <- anova_mod2$analyses[[3]]$Df[[20]]
+df4 <- anova_mod2$analyses[[4]]$Df[[20]]
+df5 <- anova_mod2$analyses[[5]]$Df[[20]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+NormXHed Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[21]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[21]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[21]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[21]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[21]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[21]]
+df2 <- anova_mod2$analyses[[2]]$Df[[21]]
+df3 <- anova_mod2$analyses[[3]]$Df[[21]]
+df4 <- anova_mod2$analyses[[4]]$Df[[21]]
+df5 <- anova_mod2$analyses[[5]]$Df[[21]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+FrameXIngroup Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[22]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[22]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[22]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[22]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[22]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[22]]
+df2 <- anova_mod2$analyses[[2]]$Df[[22]]
+df3 <- anova_mod2$analyses[[3]]$Df[[22]]
+df4 <- anova_mod2$analyses[[4]]$Df[[22]]
+df5 <- anova_mod2$analyses[[5]]$Df[[22]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+NormXIngroup Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[23]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[23]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[23]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[23]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[23]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[23]]
+df2 <- anova_mod2$analyses[[2]]$Df[[23]]
+df3 <- anova_mod2$analyses[[3]]$Df[[23]]
+df4 <- anova_mod2$analyses[[4]]$Df[[23]]
+df5 <- anova_mod2$analyses[[5]]$Df[[23]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+frameXnormXbio Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[24]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[24]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[24]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[24]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[24]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[24]]
+df2 <- anova_mod2$analyses[[2]]$Df[[24]]
+df3 <- anova_mod2$analyses[[3]]$Df[[24]]
+df4 <- anova_mod2$analyses[[4]]$Df[[24]]
+df5 <- anova_mod2$analyses[[5]]$Df[[24]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+frameXnormXalt Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[25]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[25]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[25]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[25]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[25]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[25]]
+df2 <- anova_mod2$analyses[[2]]$Df[[25]]
+df3 <- anova_mod2$analyses[[3]]$Df[[25]]
+df4 <- anova_mod2$analyses[[4]]$Df[[25]]
+df5 <- anova_mod2$analyses[[5]]$Df[[25]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+frameXnormXego Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[26]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[26]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[26]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[26]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[26]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[26]]
+df2 <- anova_mod2$analyses[[2]]$Df[[26]]
+df3 <- anova_mod2$analyses[[3]]$Df[[26]]
+df4 <- anova_mod2$analyses[[4]]$Df[[26]]
+df5 <- anova_mod2$analyses[[5]]$Df[[26]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+frameXnormXhed Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[27]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[27]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[27]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[27]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[27]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[27]]
+df2 <- anova_mod2$analyses[[2]]$Df[[27]]
+df3 <- anova_mod2$analyses[[3]]$Df[[27]]
+df4 <- anova_mod2$analyses[[4]]$Df[[27]]
+df5 <- anova_mod2$analyses[[5]]$Df[[27]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+frameXnormXingroup Interaction
+```{r include = FALSE}
+chi_sq1 <- anova_mod2$analyses[[1]]$`LR Chisq`[[28]]
+chi_sq2 <- anova_mod2$analyses[[2]]$`LR Chisq`[[28]]
+chi_sq3 <- anova_mod2$analyses[[3]]$`LR Chisq`[[28]]
+chi_sq4 <- anova_mod2$analyses[[4]]$`LR Chisq`[[28]]
+chi_sq5 <- anova_mod2$analyses[[5]]$`LR Chisq`[[28]]
+
+chi_sq <- cbind(chi_sq1, chi_sq2, chi_sq3, chi_sq4, chi_sq5)
+
+df1 <- anova_mod2$analyses[[1]]$Df[[28]]
+df2 <- anova_mod2$analyses[[2]]$Df[[28]]
+df3 <- anova_mod2$analyses[[3]]$Df[[28]]
+df4 <- anova_mod2$analyses[[4]]$Df[[28]]
+df5 <- anova_mod2$analyses[[5]]$Df[[28]]
+
+df <- cbind(df1, df2, df3, df4, df5)
+```
+
+```{r}
+micombine.chisquare(chi_sq, df, display=TRUE, version=1)
+```
+
+
+
+
+
+# Simple Effects
+
+## Framing Condition
+
+>>H1: Consumer intentions/behaviors will be lower in the self-enhancing framing than in the pro-environmental or control framing conditions.
+
+EM Means
+```{r}
+# logit scale
+frame_emmeans_logit <- emmeans(log_mice, ~ framing_condition)
+frame_emmeans_logit %>%
+  knitr::kable(digits = 2)
+
+# probability scale
+frame_emmeans_prob <- emmeans(log_mice, ~ framing_condition, type = "response")
+frame_emmeans_prob %>%
+  knitr::kable(digits = 2)
+```
+
+Text Settings
+```{r}
+text_settings <- theme(text = element_text(size = 20)) +
+  theme(plot.title = element_text(size = 20, face = 'bold')) +
+  theme(axis.title.x = element_text(face = 'bold')) +
+  theme(axis.title.y = element_text(face = 'bold')) +
+  theme(axis.text.x = element_text(size = 20)) +
+  theme(axis.text.y = element_text(size = 20)) +
+  theme(axis.ticks = element_blank())
+```
+
+Visualization
+```{r}
+# logit scale
+plot(frame_emmeans_logit)
+
+# probability scale
+plot(frame_emmeans_prob)
+
+emmip(log_mice, ~ framing_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 2, alpha = 0.5), xlab = "Framing Condition", ylab = "Consumer Intentions") + scale_x_discrete(breaks=c("control_framing","pro_env_framing","self_enh_framing"),
+        labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa() + text_settings
+```
+
+
+Planned comparisons
+```{r}
+# custom contrasts
+SE_F_EMM <- c(0,0,1)
+C_F_EMM <- c(1,0,0)
+PE_F_EMM <- c(0,1,0)
+
+# logit scale
+framing_comparisons <- contrast(frame_emmeans_logit, 
+                          method = list("SE Frame - Control Frame" = SE_F_EMM - C_F_EMM,
+                                        "SE Frame - PE Frame" = SE_F_EMM - PE_F_EMM,
+                                        "PE Frame - Control" = PE_F_EMM - C_F_EMM), adjust = "none")
+                          
+framing_comparisons %>%
+  knitr::kable(digits = c(NA,2,2,2,2,2,3))
+
+# confidence intervals
+framing_comparisons %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+
+# probability scale
+framing_comparisons <- contrast(frame_emmeans_prob, 
+                          method = list("SE Frame - Control Frame" = SE_F_EMM - C_F_EMM,
+                                        "SE Frame - PE Frame" = SE_F_EMM - PE_F_EMM,
+                                        "PE Frame - Control" = PE_F_EMM - C_F_EMM), adjust = "none")
+                          
+framing_comparisons %>%
+  knitr::kable(digits = c(NA,2,2,2,2,2,3))
+
+# confidence intervals
+framing_comparisons %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+## Norm Condition
+
+EM Means
+```{r}
+norm_emmeans_logit <- emmeans(log_mice, ~ norm_condition)
+norm_emmeans_logit %>%
+  knitr::kable(digits = 2)
+
+norm_emmeans_prob <- emmeans(log_mice, ~ norm_condition, type = "response")
+norm_emmeans_prob %>%
+  knitr::kable(digits = 2)
+```
+
+
+Visualization
+```{r}
+# logit scale
+plot(norm_emmeans_logit)
+
+# probability scale
+plot(norm_emmeans_prob)
+
+emmip(log_mice, ~ norm_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 2, alpha = 0.5), xlab = "Norm Condition", ylab = "Consumer Intentions") + scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"),
+        labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa() + text_settings
+```
+
+
+Planned comparisons
+```{r}
+# custom contrasts
+Control_N_EMM <- c(1,0,0,0,0)
+DN_EMM <- c(0,1,0,0,0)
+Conv_EMM <- c(0,0,1,0,0)
+SN_EMM <- c(0,0,0,1,0)
+MN_EMM <- c(0,0,0,0,1)
+
+# logit scale
+norm_comparisons <- contrast(norm_emmeans_logit, 
+                          method = list("Descriptive Norm - Control" = DN_EMM - Control_N_EMM,
+                                        "Convention - Control" = Conv_EMM - Control_N_EMM,
+                                        "Social Norm - Control" = SN_EMM - Control_N_EMM,
+                                        "Moral Norm - Control" = MN_EMM - Control_N_EMM), adjust = "none")
+
+                          
+norm_comparisons %>%
+  knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+norm_comparisons %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+# probability scale
+norm_comparisons <- contrast(norm_emmeans_prob, 
+                          method = list("Descriptive Norm - Control" = DN_EMM - Control_N_EMM,
+                                        "Convention - Control" = Conv_EMM - Control_N_EMM,
+                                        "Social Norm - Control" = SN_EMM - Control_N_EMM,
+                                        "Moral Norm - Control" = MN_EMM - Control_N_EMM), adjust = "none")
+
+                          
+norm_comparisons %>%
+  knitr::kable(digits = c(NA,2,2,2,2,2,3))
+
+# confidence intervals
+norm_comparisons %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+## Framing x Norm 
+
+EM Means
+```{r}
+cell_emmeans_logit <- emmeans(log_mice, ~ norm_condition*framing_condition)
+cell_emmeans_logit %>%
+  knitr::kable(digits = c(NA,NA,2,2,2,2,3))
+
+cell_emmeans_prob <- emmeans(log_mice, ~ norm_condition*framing_condition, type = "response")
+cell_emmeans_prob %>%
+  knitr::kable(digits = c(NA,NA,2,2,2,2,3))
+```
+
+
+Visualization
+```{r}
+plot(cell_emmeans_logit)
+plot(cell_emmeans_prob)
+
+emmip(log_mice, framing_condition ~ norm_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 2, alpha = 0.5), xlab = "Norm Condition", ylab = "Consumer Intentions") + scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"),
+        labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa() + text_settings
+```
+
+
+Planned comparisons
+```{r}
+# custom contrasts
+cf_cn_emm <- c(1,rep(0,14)) ## control framings
+cf_dn_emm <- c(0,1,rep(0,13))
+cf_conv_emm <- c(0,0,1,rep(0,12))
+cf_sn_emm <- c(0,0,0,1,rep(0,11))
+cf_mn_emm <- c(0,0,0,0,1,rep(0,10))
+
+pf_cn_emm <- c(0,0,0,0,0,1,rep(0,9)) ## pro-environmental framings
+pf_dn_emm <- c(0,0,0,0,0,0,1,rep(0,8))
+pf_conv_emm <- c(rep(0,7),1,(rep(0,7)))
+pf_sn_emm <- c(rep(0,8),1,(rep(0,6)))
+pf_mn_emm <- c(rep(0,9),1,(rep(0,5)))
+
+sf_cn_emm <- c(rep(0,10),1,(rep(0,4))) ## self-enhancing framings
+sf_dn_emm <- c(rep(0,11),1,(rep(0,3)))
+sf_conv_emm <- c(rep(0,12),1,(rep(0,2)))
+sf_sn_emm <- c(rep(0,13),1,0)
+sf_mn_emm <- c(rep(0,14),1)
+
+
+# logit scale
+FxN_comparisons_logit <- contrast(cell_emmeans_logit, 
+                          method = list("Control Frame + DN - Control Frame + Ctrl" = cf_dn_emm - cf_cn_emm,
+                                        "Control Frame + Conv - Control Frame + Ctrl" = cf_conv_emm - cf_cn_emm,
+                                        "Control Frame + SN - Control Frame + Ctrl" = cf_sn_emm - cf_cn_emm,
+                                        "Control Frame + MN - Control Frame + Ctrl" = cf_mn_emm - cf_cn_emm,
+                                        "PE Frame + DN - PE Frame + Ctrl" = pf_dn_emm - pf_cn_emm,
+                                        "PE Frame + Conv - PE Frame + Ctrl" = pf_conv_emm - pf_cn_emm,
+                                        "PE Frame + SN - PE Frame + Ctrl" = pf_sn_emm - pf_cn_emm,
+                                        "PE Frame + MN - PE Frame + Ctrl" = pf_mn_emm - pf_cn_emm,
+                                        "SE Frame + DN - SE Frame + Ctrl" = sf_dn_emm - sf_cn_emm,
+                                        "SE Frame + Conv - SE Frame + Ctrl" = sf_conv_emm - sf_cn_emm,
+                                        "SE Frame + SN - SE Frame + Ctrl" = sf_sn_emm - sf_cn_emm,
+                                        "SE Frame + MN - SE Frame + Ctrl" = sf_mn_emm - sf_cn_emm), adjust = "none")
+
+FxN_comparisons_logit %>%
+  knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+FxN_comparisons_logit %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+
+
+# probability scale
+FxN_comparisons_prob <- contrast(cell_emmeans_prob, 
+                          method = list("Control Frame + DN - Control Frame + Ctrl" = cf_dn_emm - cf_cn_emm,
+                                        "Control Frame + Conv - Control Frame + Ctrl" = cf_conv_emm - cf_cn_emm,
+                                        "Control Frame + SN - Control Frame + Ctrl" = cf_sn_emm - cf_cn_emm,
+                                        "Control Frame + MN - Control Frame + Ctrl" = cf_mn_emm - cf_cn_emm,
+                                        "PE Frame + DN - PE Frame + Ctrl" = pf_dn_emm - pf_cn_emm,
+                                        "PE Frame + Conv - PE Frame + Ctrl" = pf_conv_emm - pf_cn_emm,
+                                        "PE Frame + SN - PE Frame + Ctrl" = pf_sn_emm - pf_cn_emm,
+                                        "PE Frame + MN - PE Frame + Ctrl" = pf_mn_emm - pf_cn_emm,
+                                        "SE Frame + DN - SE Frame + Ctrl" = sf_dn_emm - sf_cn_emm,
+                                        "SE Frame + Conv - SE Frame + Ctrl" = sf_conv_emm - sf_cn_emm,
+                                        "SE Frame + SN - SE Frame + Ctrl" = sf_sn_emm - sf_cn_emm,
+                                        "SE Frame + MN - SE Frame + Ctrl" = sf_mn_emm - sf_cn_emm), adjust = "none")
+
+FxN_comparisons_prob %>%
+  knitr::kable(digits = c(NA,2,2,2,2,2,3))
+
+# confidence intervals
+FxN_comparisons_prob %>% confint() %>%
+  knitr::kable(digits = 2)
+
+```
+
+
+Planned comparisons of comparisons
+
+```{r}
+# convert odds ratios to log OR
+FxN_comparisons_prob %>%
+  knitr::kable(digits = 8)
+
+ORs <- c(0.6561187, 0.8977581, 0.6945434, 0.8725906, 2.0902685, 1.4270474, 1.9059225, 1.4663723, 1.6572961, 1.1991170, 1.3415565, 1.5980479)
+ORs
+
+log_ORs <- log(ORs)
+log_ORs 
+log_ORs %>% knitr::kable(digits = 2)
+
+SEs <- c(0.2484442, 0.3500453, 0.2446919, 0.3517633, 0.8578687, 0.5170541, 0.7480687, 0.5472816, 0.6238446, 0.4836775, 0.5379552, 0.6271797)
+
+# effect of descriptive norm 
+## PE vs control
+diff <- log_ORs[5] - log_ORs[1]
+diff
+
+SE_combine <- sqrt(SEs[5]^2 + SEs[1]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=FALSE)
+p
+
+## SE vs control
+diff <- log_ORs[9] - log_ORs[1]
+diff
+
+SE_combine <- sqrt(SEs[9]^2 + SEs[1]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=FALSE)
+p
+
+## SE vs PE
+diff <- log_ORs[9] - log_ORs[5]
+diff
+
+SE_combine <- sqrt(SEs[9]^2 + SEs[5]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=TRUE)
+p
+
+
+
+# effect of convention
+## PE vs control
+diff <- log_ORs[6] - log_ORs[2]
+diff
+
+SE_combine <- sqrt(SEs[6]^2 + SEs[2]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=FALSE)
+p
+
+## SE vs control
+diff <- log_ORs[10] - log_ORs[2]
+diff
+
+SE_combine <- sqrt(SEs[10]^2 + SEs[2]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=FALSE)
+p
+
+## SE vs PE
+diff <- log_ORs[10] - log_ORs[6]
+diff
+
+SE_combine <- sqrt(SEs[10]^2 + SEs[6]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=TRUE)
+p
+
+
+
+# effect of social norm
+## PE vs control
+diff <- log_ORs[7] - log_ORs[3]
+diff
+
+SE_combine <- sqrt(SEs[7]^2 + SEs[3]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=FALSE)
+p
+
+## SE vs control
+diff <- log_ORs[11] - log_ORs[3]
+diff
+
+SE_combine <- sqrt(SEs[11]^2 + SEs[3]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=FALSE)
+p
+
+## SE vs PE
+diff <- log_ORs[11] - log_ORs[7]
+diff
+
+SE_combine <- sqrt(SEs[11]^2 + SEs[7]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=TRUE)
+p
+
+
+
+
+# effect of moral norm
+## PE vs control
+diff <- log_ORs[8] - log_ORs[4]
+diff
+
+SE_combine <- sqrt(SEs[8]^2 + SEs[4]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=FALSE)
+p
+
+## SE vs control
+diff <- log_ORs[12] - log_ORs[4]
+diff
+
+SE_combine <- sqrt(SEs[12]^2 + SEs[4]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=FALSE)
+p
+
+## SE vs PE
+diff <- log_ORs[12] - log_ORs[8]
+diff
+
+SE_combine <- sqrt(SEs[12]^2 + SEs[8]^2)
+SE_combine
+
+z <- diff/SE_combine
+z
+
+p <- 2*pnorm(q=z, lower.tail=FALSE)
+p
+```
+
+
+
+
+## Exploratory RQ2: Cell differences from control
+
+>> Exploratory RQ2: Which combination of framing and norm condition produced the strongest reductions in consumer intentions compared to the control condition?
+
+```{r}
+# custom contrasts
+cf_cn_emm <- c(1,rep(0,14)) ## control framings
+cf_dn_emm <- c(0,1,rep(0,13))
+cf_conv_emm <- c(0,0,1,rep(0,12))
+cf_sn_emm <- c(0,0,0,1,rep(0,11))
+cf_mn_emm <- c(0,0,0,0,1,rep(0,10))
+
+pf_cn_emm <- c(0,0,0,0,0,1,rep(0,9)) ## pro-environmental framings
+pf_dn_emm <- c(0,0,0,0,0,0,1,rep(0,8))
+pf_conv_emm <- c(rep(0,7),1,(rep(0,7)))
+pf_sn_emm <- c(rep(0,8),1,(rep(0,6)))
+pf_mn_emm <- c(rep(0,9),1,(rep(0,5)))
+
+sf_cn_emm <- c(rep(0,10),1,(rep(0,4))) ## self-enhancing framings
+sf_dn_emm <- c(rep(0,11),1,(rep(0,3)))
+sf_conv_emm <- c(rep(0,12),1,(rep(0,2)))
+sf_sn_emm <- c(rep(0,13),1,0)
+sf_mn_emm <- c(rep(0,14),1)
+
+
+
+# logit scale
+RQ2 <- contrast(cell_emmeans_logit, 
+                          method = list("Pro-env Frame + Control vs Control" = pf_cn_emm - cf_cn_emm,
+                                        "Pro-env Frame + DN vs Control" = pf_dn_emm - cf_cn_emm,
+                                        "Pro-env Frame + Conv vs Control" = pf_conv_emm - cf_cn_emm,
+                                        "Pro-env Frame + SN vs Control" = pf_sn_emm - cf_cn_emm,
+                                        "Pro-env Frame + MN vs Control" = pf_mn_emm - cf_cn_emm,
+                                        "Self-enh Frame + Control vs Control" = sf_cn_emm - cf_cn_emm,
+                                        "Self-enh Frame + DN vs Control" = sf_dn_emm - cf_cn_emm,
+                                        "Self-enh Frame + Conv vs Control" = sf_conv_emm - cf_cn_emm,
+                                        "Self-enh Frame + SN vs Control" = sf_sn_emm - cf_cn_emm,
+                                        "Self-enh Frame + MN vs Control" = sf_mn_emm - cf_cn_emm), adjust = "sidak")
+
+RQ2 %>%
+  knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+RQ2 %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+
+# probability scale
+RQ2 <- contrast(cell_emmeans_prob, 
+                          method = list("Pro-env Frame + Control vs Control" = pf_cn_emm - cf_cn_emm,
+                                        "Pro-env Frame + DN vs Control" = pf_dn_emm - cf_cn_emm,
+                                        "Pro-env Frame + Conv vs Control" = pf_conv_emm - cf_cn_emm,
+                                        "Pro-env Frame + SN vs Control" = pf_sn_emm - cf_cn_emm,
+                                        "Pro-env Frame + MN vs Control" = pf_mn_emm - cf_cn_emm,
+                                        "Self-enh Frame + Control vs Control" = sf_cn_emm - cf_cn_emm,
+                                        "Self-enh Frame + DN vs Control" = sf_dn_emm - cf_cn_emm,
+                                        "Self-enh Frame + Conv vs Control" = sf_conv_emm - cf_cn_emm,
+                                        "Self-enh Frame + SN vs Control" = sf_sn_emm - cf_cn_emm,
+                                        "Self-enh Frame + MN vs Control" = sf_mn_emm - cf_cn_emm), adjust = "sidak")
+
+RQ2 %>%
+  knitr::kable(digits = c(NA,2,2,2,2,2,3))
+
+# confidence intervals
+RQ2 %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+
+
+# Values and Ingroup Interactions
+
+>>H4: There will be a three-way interaction between values (biospheric, egoistic, altruistic, hedonic), framing condition, & norm condition such that when a pro-environmental or control framing is used, values will moderate the effect of each norm condition, but not when a self-enhancing framing is used.
+
+Labels to use with facet_wrap
+```{r}
+norm_labs <- c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")
+names(norm_labs) <- c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm")
+
+frame_labs <- c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")
+names(frame_labs) <- c("control_framing","pro_env_framing","self_enh_framing")
+```
+
+Averaging scores across imputations
+```{r}
+complete_data_subset <- complete_data %>%
+  dplyr::select(.imp, .id, consumer_intentions, consumer_behaviors, Gender, framing_condition, norm_condition, biospheric_center, altruistic_center, egoistic_center, hedonic_center, ingroup_center, Age_center, clothing_center, self_dec_center, impress_manag_center)
+
+average_df <- complete_data_subset %>% 
+  group_by(.id) %>%
+  transmute(.imp = .imp, 
+            consumer_behaviors = consumer_behaviors, 
+            Gender = Gender,
+            framing_condition = framing_condition,
+            norm_condition = norm_condition,
+            biospheric_center = mean(biospheric_center),
+         altruistic_center = mean(altruistic_center),
+         egoistic_center = mean(egoistic_center),
+         hedonic_center = mean(hedonic_center),
+         ingroup_center = mean(ingroup_center),
+         Age_center = mean(Age_center),
+         clothing_center = mean(clothing_center),
+         self_dec_center = mean(self_dec_center),
+         impress_manag_center = mean(impress_manag_center),
+         consumer_intentions = mean(consumer_intentions))
+
+
+average_df <- average_df %>%
+  filter(.imp == 1)
+```
+
+
+## Biospheric values
+
+Is the difference between Control Norm and Other Norm different for people low vs high on biospheric values? Does this vary across framing conditions?
+
+
+### Visualization
+```{r}
+text_settings <- theme(text = element_text(size = 20)) +
+  theme(plot.title = element_text(size = 20, face = 'bold')) +
+  theme(axis.title.x = element_text(face = 'bold')) +
+  theme(axis.title.y = element_text(face = 'bold')) +
+  theme(axis.text.x = element_text(size = 14)) +
+  theme(axis.text.y = element_text(size = 20)) +
+  theme(axis.ticks = element_blank())
+```
+
+#### Bio x Framing
+```{r}
+sd_below <- mean(average_df$biospheric_center) - sd(average_df$biospheric_center)
+sd_above <- mean(average_df$biospheric_center) + sd(average_df$biospheric_center)
+
+at_list <- list(biospheric_center = c(sd_below, sd_above))
+
+emmip(log_mice, biospheric_center ~ framing_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 1), xlab = "Framing Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_framing","pro_env_framing", "self_enh_framing"), labels = c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Biospheric Values", breaks = c(-0.992493391146803, 0.992493391146803), labels = c("-1SD Biospheric", "+1SD Biospheric"), values = c("#00BFC4","#C77CFF"))
+```
+
+#### Bio x Norm
+```{r}
+emmip(log_mice, biospheric_center ~ norm_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 1), xlab = "Norm Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels = c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Biospheric Values", breaks = c(-0.992493391146803, 0.992493391146803), labels = c("-1SD Biospheric", "+1SD Biospheric"), values = c("#00BFC4","#C77CFF"))
+```
+
+
+#### Bio, Framing, & Norm
+```{r}
+emmip(log_mice, biospheric_center ~ norm_condition | framing_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 1), xlab = "Norm Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels = c("Control", "Descriptive", "Convention", "Social", "Moral")) +
+  facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Biospheric Values", breaks = c(-0.992493391146803, 0.992493391146803), labels = c("-1SD Biospheric", "+1SD Biospheric"), values = c("#00BFC4","#C77CFF"))
+  
+```
+
+
+### Planned Comparisons
+
+#### Storing low (-1SD) and high (+1SD) biospheric values
+```{r}
+sd_below <- mean(average_df$biospheric_center) - sd(average_df$biospheric_center)
+sd_above <- mean(average_df$biospheric_center) + sd(average_df$biospheric_center)
+```
+
+
+#### Calculate EM Means at low and high bio
+```{r}
+atlist <- list(biospheric_center = c(sd_below, sd_above))
+
+combinations <- emmeans(log_mice, ~ norm_condition*biospheric_center*framing_condition, at=atlist, type = "response")
+
+combinations %>% knitr::kable(digits = 2)
+```
+
+#### Custom contrasts
+```{r}
+cf_cn_low_bio <- c(1, rep(0,29)) # control framing
+cf_dn_low_bio <- c(0,1,rep(0,28))
+cf_conv_low_bio <- c(0,0,1,rep(0,27))
+cf_sn_low_bio <- c(0,0,0,1,rep(0,26))
+cf_mn_low_bio <- c(rep(0,4),1,(rep(0,25)))
+
+cf_cn_hi_bio <- c(rep(0,5),1,(rep(0,24))) 
+cf_dn_hi_bio <- c(rep(0,6),1,(rep(0,23)))
+cf_conv_hi_bio <- c(rep(0,7),1,(rep(0,22)))
+cf_sn_hi_bio <- c(rep(0,8),1,(rep(0,21)))
+cf_mn_hi_bio <- c(rep(0,9),1,(rep(0,20)))
+
+
+pf_cn_low_bio <- c(rep(0,10),1,(rep(0,19))) # pro-environmental framing
+pf_dn_low_bio <- c(rep(0,11),1,(rep(0,18)))
+pf_conv_low_bio <- c(rep(0,12),1,(rep(0,17)))
+pf_sn_low_bio <- c(rep(0,13),1,(rep(0,16)))
+pf_mn_low_bio <- c(rep(0,14),1,(rep(0,15)))
+
+pf_cn_hi_bio <- c(rep(0,15),1,(rep(0,14))) 
+pf_dn_hi_bio <- c(rep(0,16),1,(rep(0,13)))
+pf_conv_hi_bio <- c(rep(0,17),1,(rep(0,12)))
+pf_sn_hi_bio <- c(rep(0,18),1,(rep(0,11)))
+pf_mn_hi_bio <- c(rep(0,19),1,(rep(0,10)))
+
+
+sf_cn_low_bio <- c(rep(0,20),1,(rep(0,9))) # self-enhancing framing
+sf_dn_low_bio <- c(rep(0,21),1,(rep(0,8)))
+sf_conv_low_bio <- c(rep(0,22),1,(rep(0,7)))
+sf_sn_low_bio <- c(rep(0,23),1,(rep(0,6)))
+sf_mn_low_bio <- c(rep(0,24),1,(rep(0,5)))
+
+sf_cn_hi_bio <- c(rep(0,25),1,(rep(0,4))) 
+sf_dn_hi_bio <- c(rep(0,26),1,(rep(0,3)))
+sf_conv_hi_bio <- c(rep(0,27),1,(rep(0,2)))
+sf_sn_hi_bio <- c(rep(0,28),1,(rep(0,1)))
+sf_mn_hi_bio <- c(rep(0,29),1)
+```
+
+
+Effect of norm for people low vs high on biospheric values across framing conditions
+
+#### Control framing
+```{r}
+controlframe_lowvshi_bio <- contrast(combinations, 
+                       method = list("CF/DN/LowBio - CF/CN/LowBio" = cf_dn_low_bio - cf_cn_low_bio,
+                                     "CF/Conv/LowBio - CF/CN/LowBio" = cf_conv_low_bio - cf_cn_low_bio,
+                                     "CF/SN/LowBio - CF/CN/LowBio" = cf_sn_low_bio - cf_cn_low_bio,
+                                     "CF/MN/LowBio - CF/CN/LowBio" = cf_mn_low_bio - cf_cn_low_bio,
+                                     "CF/DN/HiBio - CF/CN/HiBio" = cf_dn_hi_bio - cf_cn_hi_bio,
+                                     "CF/Conv/HiBio - CF/CN/HiBio" = cf_conv_hi_bio - cf_cn_hi_bio,
+                                     "CF/SN/HiBio - CF/CN/HiBio" = cf_sn_hi_bio - cf_cn_hi_bio,
+                                     "CF/MN/HiBio - CF/CN/HiBio" = cf_mn_hi_bio - cf_cn_hi_bio), 
+                       adjust = "none")
+
+controlframe_lowvshi_bio %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+controlframe_lowvshi_bio %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+Planned comparisons
+
+Custom contrasts
+```{r}
+controlframe_lowvshi_bio
+
+dn_vs_c_lowbio <- c(1,rep(0,7))
+conv_vs_c_lowbio <- c(0,1,rep(0,6))
+sn_vs_c_lowbio <- c(0,0,1,rep(0,5))
+mn_vs_c_lowbio <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_hibio <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_hibio <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_hibio <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_hibio <- c(rep(0,7),1)
+```
+
+```{r}
+compare_bio <- contrast(controlframe_lowvshi_bio, method = list("Effect of DN (Low - High Bio)" = dn_vs_c_lowbio - dn_vs_c_hibio, 
+                                                                "Effect of Conv (Low - High Bio)" = conv_vs_c_lowbio - conv_vs_c_hibio,
+                                                                "Effect of SN (Low - High Bio)" = sn_vs_c_lowbio - sn_vs_c_hibio,
+                                                                "Effect of MN (Low - High Bio)" = mn_vs_c_lowbio - mn_vs_c_hibio), adjust = "none")
+
+compare_bio %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_bio %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+#### Pro-environmental framing
+```{r}
+proenvframe_lowvshi_bio <- contrast(combinations, 
+                       method = list("PF/DN/LowBio - PF/CN/LowBio" = pf_dn_low_bio - pf_cn_low_bio,
+                                     "PF/Conv/LowBio - PF/CN/LowBio" = pf_conv_low_bio - pf_cn_low_bio,
+                                     "PF/SN/LowBio - PF/CN/LowBio" = pf_sn_low_bio - pf_cn_low_bio,
+                                     "PF/MN/LowBio - PF/CN/LowBio" = pf_mn_low_bio - pf_cn_low_bio,
+                                     "PF/DN/HiBio - PF/CN/HiBio" = pf_dn_hi_bio - pf_cn_hi_bio,
+                                     "PF/Conv/HiBio - PF/CN/HiBio" = pf_conv_hi_bio - pf_cn_hi_bio,
+                                     "PF/SN/HiBio - PF/CN/HiBio" = pf_sn_hi_bio - pf_cn_hi_bio,
+                                     "PF/MN/HiBio - PF/CN/HiBio" = pf_mn_hi_bio - pf_cn_hi_bio), 
+                       adjust = "none")
+
+proenvframe_lowvshi_bio %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+proenvframe_lowvshi_bio %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+Planned comparisons
+
+Custom contrasts
+```{r}
+proenvframe_lowvshi_bio
+
+dn_vs_c_lowbio <- c(1,rep(0,7))
+conv_vs_c_lowbio <- c(0,1,rep(0,6))
+sn_vs_c_lowbio <- c(0,0,1,rep(0,5))
+mn_vs_c_lowbio <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_hibio <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_hibio <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_hibio <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_hibio <- c(rep(0,7),1)
+```
+
+```{r}
+compare_bio <- contrast(proenvframe_lowvshi_bio, method = list("Effect of DN (Low - High Bio)" = dn_vs_c_lowbio - dn_vs_c_hibio, 
+                                                                "Effect of Conv (Low - High Bio)" = conv_vs_c_lowbio - conv_vs_c_hibio,
+                                                                "Effect of SN (Low - High Bio)" = sn_vs_c_lowbio - sn_vs_c_hibio,
+                                                                "Effect of MN (Low - High Bio)" = mn_vs_c_lowbio - mn_vs_c_hibio), adjust = "none")
+
+compare_bio %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_bio %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+#### Self-enhancing framing
+```{r}
+selfenhframe_lowvshi_bio <- contrast(combinations, 
+                       method = list("SF/DN/LowBio - SF/CN/LowBio" = sf_dn_low_bio - sf_cn_low_bio,
+                                     "SF/Conv/LowBio - SF/CN/LowBio" = sf_conv_low_bio - sf_cn_low_bio,
+                                     "SF/SN/LowBio - SF/CN/LowBio" = sf_sn_low_bio - sf_cn_low_bio,
+                                     "SF/MN/LowBio - SF/CN/LowBio" = sf_mn_low_bio - sf_cn_low_bio,
+                                     "SF/DN/HiBio - SF/CN/HiBio" = sf_dn_hi_bio - sf_cn_hi_bio,
+                                     "SF/Conv/HiBio - SF/CN/HiBio" = sf_conv_hi_bio - sf_cn_hi_bio,
+                                     "SF/SN/HiBio - SF/CN/HiBio" = sf_sn_hi_bio - sf_cn_hi_bio,
+                                     "SF/MN/HiBio - SF/CN/HiBio" = sf_mn_hi_bio - sf_cn_hi_bio), 
+                       adjust = "none")
+
+selfenhframe_lowvshi_bio %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+selfenhframe_lowvshi_bio %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+Planned comparisons
+
+Custom contrasts
+```{r}
+selfenhframe_lowvshi_bio
+
+dn_vs_c_lowbio <- c(1,rep(0,7))
+conv_vs_c_lowbio <- c(0,1,rep(0,6))
+sn_vs_c_lowbio <- c(0,0,1,rep(0,5))
+mn_vs_c_lowbio <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_hibio <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_hibio <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_hibio <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_hibio <- c(rep(0,7),1)
+```
+
+```{r}
+compare_bio <- contrast(selfenhframe_lowvshi_bio, method = list("Effect of DN (Low - High Bio)" = dn_vs_c_lowbio - dn_vs_c_hibio, 
+                                                                "Effect of Conv (Low - High Bio)" = conv_vs_c_lowbio - conv_vs_c_hibio,
+                                                                "Effect of SN (Low - High Bio)" = sn_vs_c_lowbio - sn_vs_c_hibio,
+                                                                "Effect of MN (Low - High Bio)" = mn_vs_c_lowbio - mn_vs_c_hibio), adjust = "none")
+
+compare_bio %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_bio %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+
+## Altruistic values
+
+Is the difference between Control Norm and Other Norm different for people low vs high on altruistic values? Does this vary across framing conditions?
+
+### Visualization
+
+```{r}
+text_settings <- theme(text = element_text(size = 20)) +
+  theme(plot.title = element_text(size = 20, face = 'bold')) +
+  theme(axis.title.x = element_text(face = 'bold')) +
+  theme(axis.title.y = element_text(face = 'bold')) +
+  theme(axis.text.x = element_text(size = 14)) +
+  theme(axis.text.y = element_text(size = 20)) +
+  theme(axis.ticks = element_blank())
+```
+
+#### Alt x Framing
+```{r}
+sd_below <- mean(average_df$altruistic_center) - sd(average_df$altruistic_center)
+sd_above <- mean(average_df$altruistic_center) + sd(average_df$altruistic_center)
+
+at_list <- list(altruistic_center = c(sd_below, sd_above))
+
+emmip(log_mice, altruistic_center ~ framing_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 1), xlab = "Framing Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_framing","pro_env_framing", "self_enh_framing"), labels = c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Altruistic Values", breaks = c(-0.802959343713252, 0.802959343713252), labels = c("-1SD Altruistic", "+1SD Altruistic"), values = c("#00BFC4","#C77CFF"))
+  
+```
+
+#### Alt x Norm
+```{r}
+emmip(log_mice, altruistic_center ~ norm_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 1), xlab = "Norm Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels = c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Altruistic Values", breaks = c(-0.802959343713252, 0.802959343713252), labels = c("-1SD Altruistic", "+1SD Altruistic"), values = c("#00BFC4","#C77CFF"))
+```
+
+#### Alt, Framing, Norm
+```{r}
+emmip(log_mice, altruistic_center ~ norm_condition | framing_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 1), xlab = "Norm Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels = c("Control", "Descriptive", "Convention", "Social", "Moral")) +
+  facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Altruistic Values", breaks = c(-0.802959343713252, 0.802959343713252), labels = c("-1SD Altruistic", "+1SD Altruistic"), values = c("#00BFC4","#C77CFF"))
+  
+```
+
+
+### Planned Comparisons
+
+#### Storing low (-1SD) and high (+1SD) altspheric values
+```{r}
+sd_below <- mean(average_df$altruistic_center) - sd(average_df$altruistic_center)
+sd_above <- mean(average_df$altruistic_center) + sd(average_df$altruistic_center)
+```
+
+
+#### Calculate EM Means at low and high alt
+```{r}
+atlist <- list(altruistic_center = c(sd_below, sd_above))
+
+combinations <- emmeans(log_mice, ~ norm_condition*altruistic_center*framing_condition, at=atlist, type = "response")
+
+combinations %>% knitr::kable(digits = 2)
+```
+
+### Custom contrasts
+```{r}
+cf_cn_low_alt <- c(1, rep(0,29)) # control framing
+cf_dn_low_alt <- c(0,1,rep(0,28))
+cf_conv_low_alt <- c(0,0,1,rep(0,27))
+cf_sn_low_alt <- c(0,0,0,1,rep(0,26))
+cf_mn_low_alt <- c(rep(0,4),1,(rep(0,25)))
+
+cf_cn_hi_alt <- c(rep(0,5),1,(rep(0,24))) 
+cf_dn_hi_alt <- c(rep(0,6),1,(rep(0,23)))
+cf_conv_hi_alt <- c(rep(0,7),1,(rep(0,22)))
+cf_sn_hi_alt <- c(rep(0,8),1,(rep(0,21)))
+cf_mn_hi_alt <- c(rep(0,9),1,(rep(0,20)))
+
+
+pf_cn_low_alt <- c(rep(0,10),1,(rep(0,19))) # pro-environmental framing
+pf_dn_low_alt <- c(rep(0,11),1,(rep(0,18)))
+pf_conv_low_alt <- c(rep(0,12),1,(rep(0,17)))
+pf_sn_low_alt <- c(rep(0,13),1,(rep(0,16)))
+pf_mn_low_alt <- c(rep(0,14),1,(rep(0,15)))
+
+pf_cn_hi_alt <- c(rep(0,15),1,(rep(0,14))) 
+pf_dn_hi_alt <- c(rep(0,16),1,(rep(0,13)))
+pf_conv_hi_alt <- c(rep(0,17),1,(rep(0,12)))
+pf_sn_hi_alt <- c(rep(0,18),1,(rep(0,11)))
+pf_mn_hi_alt <- c(rep(0,19),1,(rep(0,10)))
+
+
+sf_cn_low_alt <- c(rep(0,20),1,(rep(0,9))) # self-enhancing framing
+sf_dn_low_alt <- c(rep(0,21),1,(rep(0,8)))
+sf_conv_low_alt <- c(rep(0,22),1,(rep(0,7)))
+sf_sn_low_alt <- c(rep(0,23),1,(rep(0,6)))
+sf_mn_low_alt <- c(rep(0,24),1,(rep(0,5)))
+
+sf_cn_hi_alt <- c(rep(0,25),1,(rep(0,4))) 
+sf_dn_hi_alt <- c(rep(0,26),1,(rep(0,3)))
+sf_conv_hi_alt <- c(rep(0,27),1,(rep(0,2)))
+sf_sn_hi_alt <- c(rep(0,28),1,(rep(0,1)))
+sf_mn_hi_alt <- c(rep(0,29),1)
+```
+
+
+Effect of norm for people low vs high on altruistic values across framing conditions
+
+#### Control framing
+```{r}
+controlframe_lowvshi_alt <- contrast(combinations, 
+                       method = list("CF/DN/LowAlt - CF/CN/LowAlt" = cf_dn_low_alt - cf_cn_low_alt,
+                                     "CF/Conv/LowAlt - CF/CN/LowAlt" = cf_conv_low_alt - cf_cn_low_alt,
+                                     "CF/SN/LowAlt - CF/CN/LowAlt" = cf_sn_low_alt - cf_cn_low_alt,
+                                     "CF/MN/LowAlt - CF/CN/LowAlt" = cf_mn_low_alt - cf_cn_low_alt,
+                                     "CF/DN/HiAlt - CF/CN/HiAlt" = cf_dn_hi_alt - cf_cn_hi_alt,
+                                     "CF/Conv/HiAlt - CF/CN/HiAlt" = cf_conv_hi_alt - cf_cn_hi_alt,
+                                     "CF/SN/HiAlt - CF/CN/HiAlt" = cf_sn_hi_alt - cf_cn_hi_alt,
+                                     "CF/MN/HiAlt - CF/CN/HiAlt" = cf_mn_hi_alt - cf_cn_hi_alt), 
+                       adjust = "none")
+
+controlframe_lowvshi_alt %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+controlframe_lowvshi_alt %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+controlframe_lowvshi_alt
+
+dn_vs_c_LowAlt <- c(1,rep(0,7))
+conv_vs_c_LowAlt <- c(0,1,rep(0,6))
+sn_vs_c_LowAlt <- c(0,0,1,rep(0,5))
+mn_vs_c_LowAlt <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiAlt <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiAlt <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiAlt <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiAlt <- c(rep(0,7),1)
+```
+
+```{r}
+compare_alt <- contrast(controlframe_lowvshi_alt, method = list("Effect of DN (Low - High alt)" = dn_vs_c_LowAlt - dn_vs_c_HiAlt, 
+                                                                "Effect of Conv (Low - High alt)" = conv_vs_c_LowAlt - conv_vs_c_HiAlt,
+                                                                "Effect of SN (Low - High alt)" = sn_vs_c_LowAlt - sn_vs_c_HiAlt,
+                                                                "Effect of MN (Low - High alt)" = mn_vs_c_LowAlt - mn_vs_c_HiAlt), adjust = "none")
+
+compare_alt %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_alt %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+#### Pro-environmental framing
+```{r}
+proenvframe_lowvshi_alt <- contrast(combinations, 
+                       method = list("PF/DN/LowAlt - PF/CN/LowAlt" = pf_dn_low_alt - pf_cn_low_alt,
+                                     "PF/Conv/LowAlt - PF/CN/LowAlt" = pf_conv_low_alt - pf_cn_low_alt,
+                                     "PF/SN/LowAlt - PF/CN/LowAlt" = pf_sn_low_alt - pf_cn_low_alt,
+                                     "PF/MN/LowAlt - PF/CN/LowAlt" = pf_mn_low_alt - pf_cn_low_alt,
+                                     "PF/DN/HiAlt - PF/CN/HiAlt" = pf_dn_hi_alt - pf_cn_hi_alt,
+                                     "PF/Conv/HiAlt - PF/CN/HiAlt" = pf_conv_hi_alt - pf_cn_hi_alt,
+                                     "PF/SN/HiAlt - PF/CN/HiAlt" = pf_sn_hi_alt - pf_cn_hi_alt,
+                                     "PF/MN/HiAlt - PF/CN/HiAlt" = pf_mn_hi_alt - pf_cn_hi_alt), 
+                       adjust = "none")
+
+proenvframe_lowvshi_alt %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+proenvframe_lowvshi_alt %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+proenvframe_lowvshi_alt
+
+dn_vs_c_LowAlt <- c(1,rep(0,7))
+conv_vs_c_LowAlt <- c(0,1,rep(0,6))
+sn_vs_c_LowAlt <- c(0,0,1,rep(0,5))
+mn_vs_c_LowAlt <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiAlt <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiAlt <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiAlt <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiAlt <- c(rep(0,7),1)
+```
+
+```{r}
+compare_alt <- contrast(proenvframe_lowvshi_alt, method = list("Effect of DN (Low - High alt)" = dn_vs_c_LowAlt - dn_vs_c_HiAlt, 
+                                                                "Effect of Conv (Low - High alt)" = conv_vs_c_LowAlt - conv_vs_c_HiAlt,
+                                                                "Effect of SN (Low - High alt)" = sn_vs_c_LowAlt - sn_vs_c_HiAlt,
+                                                                "Effect of MN (Low - High alt)" = mn_vs_c_LowAlt - mn_vs_c_HiAlt), adjust = "none")
+
+compare_alt %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_alt %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+#### Self-enhancing framing
+```{r}
+selfenhframe_lowvshi_alt <- contrast(combinations, 
+                       method = list("SF/DN/LowAlt - SF/CN/LowAlt" = sf_dn_low_alt - sf_cn_low_alt,
+                                     "SF/Conv/LowAlt - SF/CN/LowAlt" = sf_conv_low_alt - sf_cn_low_alt,
+                                     "SF/SN/LowAlt - SF/CN/LowAlt" = sf_sn_low_alt - sf_cn_low_alt,
+                                     "SF/MN/LowAlt - SF/CN/LowAlt" = sf_mn_low_alt - sf_cn_low_alt,
+                                     "SF/DN/HiAlt - SF/CN/HiAlt" = sf_dn_hi_alt - sf_cn_hi_alt,
+                                     "SF/Conv/HiAlt - SF/CN/HiAlt" = sf_conv_hi_alt - sf_cn_hi_alt,
+                                     "SF/SN/HiAlt - SF/CN/HiAlt" = sf_sn_hi_alt - sf_cn_hi_alt,
+                                     "SF/MN/HiAlt - SF/CN/HiAlt" = sf_mn_hi_alt - sf_cn_hi_alt), 
+                       adjust = "none")
+
+selfenhframe_lowvshi_alt %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+selfenhframe_lowvshi_alt %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+selfenhframe_lowvshi_alt
+
+dn_vs_c_LowAlt <- c(1,rep(0,7))
+conv_vs_c_LowAlt <- c(0,1,rep(0,6))
+sn_vs_c_LowAlt <- c(0,0,1,rep(0,5))
+mn_vs_c_LowAlt <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiAlt <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiAlt <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiAlt <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiAlt <- c(rep(0,7),1)
+```
+
+```{r}
+compare_alt <- contrast(selfenhframe_lowvshi_alt, method = list("Effect of DN (Low - High alt)" = dn_vs_c_LowAlt - dn_vs_c_HiAlt, 
+                                                                "Effect of Conv (Low - High alt)" = conv_vs_c_LowAlt - conv_vs_c_HiAlt,
+                                                                "Effect of SN (Low - High alt)" = sn_vs_c_LowAlt - sn_vs_c_HiAlt,
+                                                                "Effect of MN (Low - High alt)" = mn_vs_c_LowAlt - mn_vs_c_HiAlt), adjust = "none")
+
+compare_alt %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_alt %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+
+## Egoistic values
+
+Is the difference between Control Norm and Other Norm different for people low vs high on egoistic values? Does this vary across framing conditions?
+
+### Visualization
+
+```{r}
+text_settings <- theme(text = element_text(size = 20)) +
+  theme(plot.title = element_text(size = 20, face = 'bold')) +
+  theme(axis.title.x = element_text(face = 'bold')) +
+  theme(axis.title.y = element_text(face = 'bold')) +
+  theme(axis.text.x = element_text(size = 14)) +
+  theme(axis.text.y = element_text(size = 20)) +
+  theme(axis.ticks = element_blank())
+```
+
+#### Ego x Framing
+```{r}
+sd_below <- mean(average_df$egoistic_center) - sd(average_df$egoistic_center)
+sd_above <- mean(average_df$egoistic_center) + sd(average_df$egoistic_center)
+
+at_list <- list(egoistic_center = c(sd_below, sd_above))
+
+emmip(log_mice, egoistic_center ~ framing_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 1), xlab = "Framing Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_framing","pro_env_framing", "self_enh_framing"), labels = c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Egoistic Values", breaks = c(-0.91717706890615, 0.917177068906151), labels = c("-1SD Egoistic", "+1SD Egoistic"), values = c("#00BFC4","#C77CFF"))
+  
+```
+
+#### Ego x Norm
+```{r}
+emmip(log_mice, egoistic_center ~ norm_condition, CIs = TRUE, type = "response", CIarg = list(lwd = 1.2, alpha = 1), xlab = "Norm Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels = c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Egoistic Values", breaks = c(-0.91717706890615, 0.917177068906151), labels = c("-1SD Egoistic", "+1SD Egoistic"), values = c("#00BFC4","#C77CFF"))
+```
+
+#### Ego, Norm, Framing
+```{r}
+emmip(log_mice, egoistic_center ~ norm_condition | framing_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 1), xlab = "Norm Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels = c("Control", "Descriptive", "Convention", "Social", "Moral")) +
+  facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Egoistic Values", breaks = c(-0.91717706890615, 0.917177068906151), labels = c("-1SD Egoistic", "+1SD Egoistic"), values = c("#00BFC4","#C77CFF"))
+  
+```
+
+
+
+### Planned Comparisons
+
+#### Storing low (-1SD) and high (+1SD) egoistic values
+```{r}
+sd_below <- mean(average_df$egoistic_center) - sd(average_df$egoistic_center)
+sd_above <- mean(average_df$egoistic_center) + sd(average_df$egoistic_center)
+```
+
+
+#### Calculate EM Means at low and high ego
+```{r}
+atlist <- list(egoistic_center = c(sd_below, sd_above))
+
+combinations <- emmeans(log_mice, ~ norm_condition*egoistic_center*framing_condition, at=atlist, type = "response")
+
+combinations %>% knitr::kable(digits = 2)
+```
+
+### Custom contrasts
+```{r}
+cf_cn_low_ego <- c(1, rep(0,29)) # control framing
+cf_dn_low_ego <- c(0,1,rep(0,28))
+cf_conv_low_ego <- c(0,0,1,rep(0,27))
+cf_sn_low_ego <- c(0,0,0,1,rep(0,26))
+cf_mn_low_ego <- c(rep(0,4),1,(rep(0,25)))
+
+cf_cn_hi_ego <- c(rep(0,5),1,(rep(0,24))) 
+cf_dn_hi_ego <- c(rep(0,6),1,(rep(0,23)))
+cf_conv_hi_ego <- c(rep(0,7),1,(rep(0,22)))
+cf_sn_hi_ego <- c(rep(0,8),1,(rep(0,21)))
+cf_mn_hi_ego <- c(rep(0,9),1,(rep(0,20)))
+
+
+pf_cn_low_ego <- c(rep(0,10),1,(rep(0,19))) # pro-environmental framing
+pf_dn_low_ego <- c(rep(0,11),1,(rep(0,18)))
+pf_conv_low_ego <- c(rep(0,12),1,(rep(0,17)))
+pf_sn_low_ego <- c(rep(0,13),1,(rep(0,16)))
+pf_mn_low_ego <- c(rep(0,14),1,(rep(0,15)))
+
+pf_cn_hi_ego <- c(rep(0,15),1,(rep(0,14))) 
+pf_dn_hi_ego <- c(rep(0,16),1,(rep(0,13)))
+pf_conv_hi_ego <- c(rep(0,17),1,(rep(0,12)))
+pf_sn_hi_ego <- c(rep(0,18),1,(rep(0,11)))
+pf_mn_hi_ego <- c(rep(0,19),1,(rep(0,10)))
+
+
+sf_cn_low_ego <- c(rep(0,20),1,(rep(0,9))) # self-enhancing framing
+sf_dn_low_ego <- c(rep(0,21),1,(rep(0,8)))
+sf_conv_low_ego <- c(rep(0,22),1,(rep(0,7)))
+sf_sn_low_ego <- c(rep(0,23),1,(rep(0,6)))
+sf_mn_low_ego <- c(rep(0,24),1,(rep(0,5)))
+
+sf_cn_hi_ego <- c(rep(0,25),1,(rep(0,4))) 
+sf_dn_hi_ego <- c(rep(0,26),1,(rep(0,3)))
+sf_conv_hi_ego <- c(rep(0,27),1,(rep(0,2)))
+sf_sn_hi_ego <- c(rep(0,28),1,(rep(0,1)))
+sf_mn_hi_ego <- c(rep(0,29),1)
+```
+
+
+Effect of norm for people low vs high on egoistic values across framing conditions
+
+#### Control framing
+```{r}
+controlframe_lowvshi_ego <- contrast(combinations, 
+                       method = list("CF/DN/LowEgo - CF/CN/LowEgo" = cf_dn_low_ego - cf_cn_low_ego,
+                                     "CF/Conv/LowEgo - CF/CN/LowEgo" = cf_conv_low_ego - cf_cn_low_ego,
+                                     "CF/SN/LowEgo - CF/CN/LowEgo" = cf_sn_low_ego - cf_cn_low_ego,
+                                     "CF/MN/LowEgo - CF/CN/LowEgo" = cf_mn_low_ego - cf_cn_low_ego,
+                                     "CF/DN/HiEgo - CF/CN/HiEgo" = cf_dn_hi_ego - cf_cn_hi_ego,
+                                     "CF/Conv/HiEgo - CF/CN/HiEgo" = cf_conv_hi_ego - cf_cn_hi_ego,
+                                     "CF/SN/HiEgo - CF/CN/HiEgo" = cf_sn_hi_ego - cf_cn_hi_ego,
+                                     "CF/MN/HiEgo - CF/CN/HiEgo" = cf_mn_hi_ego - cf_cn_hi_ego), 
+                       adjust = "none")
+
+controlframe_lowvshi_ego %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+controlframe_lowvshi_ego %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+controlframe_lowvshi_ego
+
+dn_vs_c_LowEgo <- c(1,rep(0,7))
+conv_vs_c_LowEgo <- c(0,1,rep(0,6))
+sn_vs_c_LowEgo <- c(0,0,1,rep(0,5))
+mn_vs_c_LowEgo <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiEgo <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiEgo <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiEgo <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiEgo <- c(rep(0,7),1)
+```
+
+```{r}
+compare_ego <- contrast(controlframe_lowvshi_ego, method = list("Effect of DN (Low - High ego)" = dn_vs_c_LowEgo - dn_vs_c_HiEgo, 
+                                                                "Effect of Conv (Low - High ego)" = conv_vs_c_LowEgo - conv_vs_c_HiEgo,
+                                                                "Effect of SN (Low - High ego)" = sn_vs_c_LowEgo - sn_vs_c_HiEgo,
+                                                                "Effect of MN (Low - High ego)" = mn_vs_c_LowEgo - mn_vs_c_HiEgo), adjust = "none")
+
+compare_ego %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_ego %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+#### Pro-environmental framing
+```{r}
+proenvframe_lowvshi_ego <- contrast(combinations, 
+                       method = list("PF/DN/LowEgo - PF/CN/LowEgo" = pf_dn_low_ego - pf_cn_low_ego,
+                                     "PF/Conv/LowEgo - PF/CN/LowEgo" = pf_conv_low_ego - pf_cn_low_ego,
+                                     "PF/SN/LowEgo - PF/CN/LowEgo" = pf_sn_low_ego - pf_cn_low_ego,
+                                     "PF/MN/LowEgo - PF/CN/LowEgo" = pf_mn_low_ego - pf_cn_low_ego,
+                                     "PF/DN/HiEgo - PF/CN/HiEgo" = pf_dn_hi_ego - pf_cn_hi_ego,
+                                     "PF/Conv/HiEgo - PF/CN/HiEgo" = pf_conv_hi_ego - pf_cn_hi_ego,
+                                     "PF/SN/HiEgo - PF/CN/HiEgo" = pf_sn_hi_ego - pf_cn_hi_ego,
+                                     "PF/MN/HiEgo - PF/CN/HiEgo" = pf_mn_hi_ego - pf_cn_hi_ego), 
+                       adjust = "none")
+
+proenvframe_lowvshi_ego %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+proenvframe_lowvshi_ego %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+proenvframe_lowvshi_ego
+
+dn_vs_c_LowEgo <- c(1,rep(0,7))
+conv_vs_c_LowEgo <- c(0,1,rep(0,6))
+sn_vs_c_LowEgo <- c(0,0,1,rep(0,5))
+mn_vs_c_LowEgo <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiEgo <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiEgo <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiEgo <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiEgo <- c(rep(0,7),1)
+```
+
+```{r}
+compare_ego <- contrast(proenvframe_lowvshi_ego, method = list("Effect of DN (Low - High ego)" = dn_vs_c_LowEgo - dn_vs_c_HiEgo, 
+                                                                "Effect of Conv (Low - High ego)" = conv_vs_c_LowEgo - conv_vs_c_HiEgo,
+                                                                "Effect of SN (Low - High ego)" = sn_vs_c_LowEgo - sn_vs_c_HiEgo,
+                                                                "Effect of MN (Low - High ego)" = mn_vs_c_LowEgo - mn_vs_c_HiEgo), adjust = "none")
+
+compare_ego %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_ego %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+#### Self-enhancing framing
+```{r}
+selfenhframe_lowvshi_ego <- contrast(combinations, 
+                       method = list("SF/DN/LowEgo - SF/CN/LowEgo" = sf_dn_low_ego - sf_cn_low_ego,
+                                     "SF/Conv/LowEgo - SF/CN/LowEgo" = sf_conv_low_ego - sf_cn_low_ego,
+                                     "SF/SN/LowEgo - SF/CN/LowEgo" = sf_sn_low_ego - sf_cn_low_ego,
+                                     "SF/MN/LowEgo - SF/CN/LowEgo" = sf_mn_low_ego - sf_cn_low_ego,
+                                     "SF/DN/HiEgo - SF/CN/HiEgo" = sf_dn_hi_ego - sf_cn_hi_ego,
+                                     "SF/Conv/HiEgo - SF/CN/HiEgo" = sf_conv_hi_ego - sf_cn_hi_ego,
+                                     "SF/SN/HiEgo - SF/CN/HiEgo" = sf_sn_hi_ego - sf_cn_hi_ego,
+                                     "SF/MN/HiEgo - SF/CN/HiEgo" = sf_mn_hi_ego - sf_cn_hi_ego), 
+                       adjust = "none")
+
+selfenhframe_lowvshi_ego %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+selfenhframe_lowvshi_ego %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+```
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+selfenhframe_lowvshi_ego
+
+dn_vs_c_LowEgo <- c(1,rep(0,7))
+conv_vs_c_LowEgo <- c(0,1,rep(0,6))
+sn_vs_c_LowEgo <- c(0,0,1,rep(0,5))
+mn_vs_c_LowEgo <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiEgo <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiEgo <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiEgo <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiEgo <- c(rep(0,7),1)
+```
+
+```{r}
+compare_ego <- contrast(selfenhframe_lowvshi_ego, method = list("Effect of DN (Low - High ego)" = dn_vs_c_LowEgo - dn_vs_c_HiEgo, 
+                                                                "Effect of Conv (Low - High ego)" = conv_vs_c_LowEgo - conv_vs_c_HiEgo,
+                                                                "Effect of SN (Low - High ego)" = sn_vs_c_LowEgo - sn_vs_c_HiEgo,
+                                                                "Effect of MN (Low - High ego)" = mn_vs_c_LowEgo - mn_vs_c_HiEgo), adjust = "none")
+
+compare_ego %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_ego %>% confint() %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+
+## Hedonic values
+
+Is the difference between Control Norm and Other Norm different for people low vs high on hedonic values? Does this vary across framing conditions?
+
+
+### Visualizations
+
+```{r}
+text_settings <- theme(text = element_text(size = 20)) +
+  theme(plot.title = element_text(size = 20, face = 'bold')) +
+  theme(axis.title.x = element_text(face = 'bold')) +
+  theme(axis.title.y = element_text(face = 'bold')) +
+  theme(axis.text.x = element_text(size = 14)) +
+  theme(axis.text.y = element_text(size = 20)) +
+  theme(axis.ticks = element_blank())
+```
+
+#### Hed x Framing
+```{r}
+sd_below <- mean(average_df$hedonic_center) - sd(average_df$hedonic_center)
+sd_above <- mean(average_df$hedonic_center) + sd(average_df$hedonic_center)
+
+at_list <- list(hedonic_center = c(sd_below, sd_above))
+
+emmip(log_mice, hedonic_center ~ framing_condition, CIs = TRUE, type = "response", CIarg = list(lwd = 1.2, alpha = 1), xlab = "Framing Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_framing","pro_env_framing", "self_enh_framing"), labels = c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Hedonic Values", breaks = c(-0.790766915042502, 0.790766915042502), labels = c("-1SD Hedonic", "+1SD Hedonic"), values = c("#00BFC4","#C77CFF"))
+  
+```
+
+#### Hed x Norm
+```{r}
+emmip(log_mice, hedonic_center ~ norm_condition, CIs = TRUE, type = "response", CIarg = list(lwd = 1.2, alpha = 1), xlab = "Norm Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels = c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Hedonic Values", breaks = c(-0.790766915042502, 0.790766915042502), labels = c("-1SD Hedonic", "+1SD Hedonic"), values = c("#00BFC4","#C77CFF"))
+```
+
+
+#### Hed, Norm, Framing
+```{r}
+emmip(log_mice, hedonic_center ~ norm_condition | framing_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 1), xlab = "Norm Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels = c("Control", "Descriptive", "Convention", "Social", "Moral")) +
+  facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Hedonic Values", breaks = c(-0.790766915042502, 0.790766915042502), labels = c("-1SD Hedonic", "+1SD Hedonic"), values = c("#00BFC4","#C77CFF"))
+  
+```
+
+
+## Planned Comparisons
+
+### Storing low (-1SD) and high (+1SD) hedonic values
+```{r}
+sd_below <- mean(average_df$hedonic_center) - sd(average_df$hedonic_center)
+sd_above <- mean(average_df$hedonic_center) + sd(average_df$hedonic_center)
+```
+
+
+### Calculate EM Means at low and high hed
+```{r}
+atlist <- list(hedonic_center = c(sd_below, sd_above))
+
+combinations <- emmeans(log_mice, ~ norm_condition*hedonic_center*framing_condition, at=atlist, type = "response")
+
+combinations %>% knitr::kable(digits = 2)
+```
+
+### Custom contrasts
+```{r}
+cf_cn_low_hed <- c(1, rep(0,29)) # control framing
+cf_dn_low_hed <- c(0,1,rep(0,28))
+cf_conv_low_hed <- c(0,0,1,rep(0,27))
+cf_sn_low_hed <- c(0,0,0,1,rep(0,26))
+cf_mn_low_hed <- c(rep(0,4),1,(rep(0,25)))
+
+cf_cn_hi_hed <- c(rep(0,5),1,(rep(0,24))) 
+cf_dn_hi_hed <- c(rep(0,6),1,(rep(0,23)))
+cf_conv_hi_hed <- c(rep(0,7),1,(rep(0,22)))
+cf_sn_hi_hed <- c(rep(0,8),1,(rep(0,21)))
+cf_mn_hi_hed <- c(rep(0,9),1,(rep(0,20)))
+
+
+pf_cn_low_hed <- c(rep(0,10),1,(rep(0,19))) # pro-environmental framing
+pf_dn_low_hed <- c(rep(0,11),1,(rep(0,18)))
+pf_conv_low_hed <- c(rep(0,12),1,(rep(0,17)))
+pf_sn_low_hed <- c(rep(0,13),1,(rep(0,16)))
+pf_mn_low_hed <- c(rep(0,14),1,(rep(0,15)))
+
+pf_cn_hi_hed <- c(rep(0,15),1,(rep(0,14))) 
+pf_dn_hi_hed <- c(rep(0,16),1,(rep(0,13)))
+pf_conv_hi_hed <- c(rep(0,17),1,(rep(0,12)))
+pf_sn_hi_hed <- c(rep(0,18),1,(rep(0,11)))
+pf_mn_hi_hed <- c(rep(0,19),1,(rep(0,10)))
+
+
+sf_cn_low_hed <- c(rep(0,20),1,(rep(0,9))) # self-enhancing framing
+sf_dn_low_hed <- c(rep(0,21),1,(rep(0,8)))
+sf_conv_low_hed <- c(rep(0,22),1,(rep(0,7)))
+sf_sn_low_hed <- c(rep(0,23),1,(rep(0,6)))
+sf_mn_low_hed <- c(rep(0,24),1,(rep(0,5)))
+
+sf_cn_hi_hed <- c(rep(0,25),1,(rep(0,4))) 
+sf_dn_hi_hed <- c(rep(0,26),1,(rep(0,3)))
+sf_conv_hi_hed <- c(rep(0,27),1,(rep(0,2)))
+sf_sn_hi_hed <- c(rep(0,28),1,(rep(0,1)))
+sf_mn_hi_hed <- c(rep(0,29),1)
+```
+
+
+Effect of norm for people low vs high on hedonic values across framing conditions
+
+#### Control framing
+```{r}
+controlframe_lowvshi_hed <- contrast(combinations, 
+                       method = list("CF/DN/LowHed - CF/CN/LowHed" = cf_dn_low_hed - cf_cn_low_hed,
+                                     "CF/Conv/LowHed - CF/CN/LowHed" = cf_conv_low_hed - cf_cn_low_hed,
+                                     "CF/SN/LowHed - CF/CN/LowHed" = cf_sn_low_hed - cf_cn_low_hed,
+                                     "CF/MN/LowHed - CF/CN/LowHed" = cf_mn_low_hed - cf_cn_low_hed,
+                                     "CF/DN/HiHed - CF/CN/HiHed" = cf_dn_hi_hed - cf_cn_hi_hed,
+                                     "CF/Conv/HiHed - CF/CN/HiHed" = cf_conv_hi_hed - cf_cn_hi_hed,
+                                     "CF/SN/HiHed - CF/CN/HiHed" = cf_sn_hi_hed - cf_cn_hi_hed,
+                                     "CF/MN/HiHed - CF/CN/HiHed" = cf_mn_hi_hed - cf_cn_hi_hed), 
+                       adjust = "none")
+
+controlframe_lowvshi_hed %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+controlframe_lowvshi_hed %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+```
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+controlframe_lowvshi_hed
+
+dn_vs_c_LowHed <- c(1,rep(0,7))
+conv_vs_c_LowHed <- c(0,1,rep(0,6))
+sn_vs_c_LowHed <- c(0,0,1,rep(0,5))
+mn_vs_c_LowHed <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiHed <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiHed <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiHed <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiHed <- c(rep(0,7),1)
+```
+
+```{r}
+compare_hed <- contrast(controlframe_lowvshi_hed, method = list("Effect of DN (Low - High hed)" = dn_vs_c_LowHed - dn_vs_c_HiHed, 
+                                                                "Effect of Conv (Low - High hed)" = conv_vs_c_LowHed - conv_vs_c_HiHed,
+                                                                "Effect of SN (Low - High hed)" = sn_vs_c_LowHed - sn_vs_c_HiHed,
+                                                                "Effect of MN (Low - High hed)" = mn_vs_c_LowHed - mn_vs_c_HiHed), adjust = "none")
+
+compare_hed %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_hed %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+```
+
+
+
+#### Pro-environmental framing
+```{r}
+proenvframe_lowvshi_hed <- contrast(combinations, 
+                       method = list("PF/DN/LowHed - PF/CN/LowHed" = pf_dn_low_hed - pf_cn_low_hed,
+                                     "PF/Conv/LowHed - PF/CN/LowHed" = pf_conv_low_hed - pf_cn_low_hed,
+                                     "PF/SN/LowHed - PF/CN/LowHed" = pf_sn_low_hed - pf_cn_low_hed,
+                                     "PF/MN/LowHed - PF/CN/LowHed" = pf_mn_low_hed - pf_cn_low_hed,
+                                     "PF/DN/HiHed - PF/CN/HiHed" = pf_dn_hi_hed - pf_cn_hi_hed,
+                                     "PF/Conv/HiHed - PF/CN/HiHed" = pf_conv_hi_hed - pf_cn_hi_hed,
+                                     "PF/SN/HiHed - PF/CN/HiHed" = pf_sn_hi_hed - pf_cn_hi_hed,
+                                     "PF/MN/HiHed - PF/CN/HiHed" = pf_mn_hi_hed - pf_cn_hi_hed), 
+                       adjust = "none")
+
+proenvframe_lowvshi_hed %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+proenvframe_lowvshi_hed %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+```
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+proenvframe_lowvshi_hed
+
+dn_vs_c_LowHed <- c(1,rep(0,7))
+conv_vs_c_LowHed <- c(0,1,rep(0,6))
+sn_vs_c_LowHed <- c(0,0,1,rep(0,5))
+mn_vs_c_LowHed <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiHed <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiHed <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiHed <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiHed <- c(rep(0,7),1)
+```
+
+```{r}
+compare_hed <- contrast(proenvframe_lowvshi_hed, method = list("Effect of DN (Low - High hed)" = dn_vs_c_LowHed - dn_vs_c_HiHed, 
+                                                                "Effect of Conv (Low - High hed)" = conv_vs_c_LowHed - conv_vs_c_HiHed,
+                                                                "Effect of SN (Low - High hed)" = sn_vs_c_LowHed - sn_vs_c_HiHed,
+                                                                "Effect of MN (Low - High hed)" = mn_vs_c_LowHed - mn_vs_c_HiHed), adjust = "none")
+
+compare_hed %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_hed %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+```
+
+
+
+#### Self-enhancing framing
+```{r}
+selfenhframe_lowvshi_hed <- contrast(combinations, 
+                       method = list("SF/DN/LowHed - SF/CN/LowHed" = sf_dn_low_hed - sf_cn_low_hed,
+                                     "SF/Conv/LowHed - SF/CN/LowHed" = sf_conv_low_hed - sf_cn_low_hed,
+                                     "SF/SN/LowHed - SF/CN/LowHed" = sf_sn_low_hed - sf_cn_low_hed,
+                                     "SF/MN/LowHed - SF/CN/LowHed" = sf_mn_low_hed - sf_cn_low_hed,
+                                     "SF/DN/HiHed - SF/CN/HiHed" = sf_dn_hi_hed - sf_cn_hi_hed,
+                                     "SF/Conv/HiHed - SF/CN/HiHed" = sf_conv_hi_hed - sf_cn_hi_hed,
+                                     "SF/SN/HiHed - SF/CN/HiHed" = sf_sn_hi_hed - sf_cn_hi_hed,
+                                     "SF/MN/HiHed - SF/CN/HiHed" = sf_mn_hi_hed - sf_cn_hi_hed), 
+                       adjust = "none")
+
+selfenhframe_lowvshi_hed %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+selfenhframe_lowvshi_hed %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+```
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+selfenhframe_lowvshi_hed
+
+dn_vs_c_LowHed <- c(1,rep(0,7))
+conv_vs_c_LowHed <- c(0,1,rep(0,6))
+sn_vs_c_LowHed <- c(0,0,1,rep(0,5))
+mn_vs_c_LowHed <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiHed <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiHed <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiHed <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiHed <- c(rep(0,7),1)
+```
+
+```{r}
+compare_hed <- contrast(selfenhframe_lowvshi_hed, method = list("Effect of DN (Low - High hed)" = dn_vs_c_LowHed - dn_vs_c_HiHed, 
+                                                                "Effect of Conv (Low - High hed)" = conv_vs_c_LowHed - conv_vs_c_HiHed,
+                                                                "Effect of SN (Low - High hed)" = sn_vs_c_LowHed - sn_vs_c_HiHed,
+                                                                "Effect of MN (Low - High hed)" = mn_vs_c_LowHed - mn_vs_c_HiHed), adjust = "none")
+
+compare_hed %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_hed %>% confint() %>%
+  knitr::kable(digits = 2)
+
+```
+
+
+
+## Ingroup Identification
+
+>>Exploratory Research Question 1: Is there a three-way interaction between in-group identification, framing condition, and norm-intervention condition?
+
+Is the difference between Control Norm and Other Norm different for people low vs high on ingroup identification? Does this vary across framing conditions?
+
+
+### Visualization
+
+```{r}
+text_settings <- theme(text = element_text(size = 20)) +
+  theme(plot.title = element_text(size = 20, face = 'bold')) +
+  theme(axis.title.x = element_text(face = 'bold')) +
+  theme(axis.title.y = element_text(face = 'bold')) +
+  theme(axis.text.x = element_text(size = 14)) +
+  theme(axis.text.y = element_text(size = 20)) +
+  theme(axis.ticks = element_blank())
+```
+
+
+#### Ingroup x Framing
+```{r}
+sd_below <- mean(average_df$ingroup_center) - sd(average_df$ingroup_center)
+sd_above <- mean(average_df$ingroup_center) + sd(average_df$ingroup_center)
+
+at_list <- list(ingroup_center = c(sd_below, sd_above))
+
+emmip(log_mice, ingroup_center ~ framing_condition, CIs = TRUE, type = "response", CIarg = list(lwd = 1.2, alpha = 1), xlab = "Framing Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_framing","pro_env_framing", "self_enh_framing"), labels = c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Ingroup Identification", breaks = c(-1.01218644014995, 1.01218644014995), labels = c("-1SD Ingroup", "+1SD Ingroup"), values = c("#00BFC4","#C77CFF"))
+  
+```
+
+#### Ingroup x Norm
+```{r}
+emmip(log_mice, ingroup_center ~ norm_condition, CIs = TRUE, type = "response", CIarg = list(lwd = 1.2, alpha = 1), xlab = "Norm Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels = c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Ingroup Identification", breaks = c(-1.01218644014995, 1.01218644014995), labels = c("-1SD Ingroup", "+1SD Ingroup"), values = c("#00BFC4","#C77CFF"))
+```
+
+
+#### Ingroup, Norm, Framing
+
+```{r}
+emmip(log_mice, ingroup_center ~ norm_condition | framing_condition, type = "response", CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 1), xlab = "Norm Condition", ylab = "Consumer Intentions", at = at_list) + 
+  scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels = c("Control", "Descriptive", "Convention", "Social", "Moral")) +
+  facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +
+  theme_apa() +
+  text_settings +
+  scale_color_manual(name = "Ingroup Identification", breaks = c(-1.01218644014995, 1.01218644014995), labels = c("-1SD Ingroup", "+1SD Ingroup"), values = c("#00BFC4","#C77CFF"))
+  
+```
+
+
+### Planned Comparisons
+
+#### Storing low (-1SD) and high (+1SD) ingroup identification
+```{r}
+sd_below <- mean(average_df$ingroup_center) - sd(average_df$ingroup_center)
+sd_above <- mean(average_df$ingroup_center) + sd(average_df$ingroup_center)
+```
+
+
+#### Calculate EM Means at low and high bio
+```{r}
+atlist <- list(ingroup_center = c(sd_below, sd_above))
+
+combinations <- emmeans(log_mice, ~ norm_condition*ingroup_center*framing_condition, at=atlist, type = "response")
+
+combinations %>% knitr::kable(digits = 2)
+```
+
+### Custom contrasts
+```{r}
+cf_cn_low_ing <- c(1, rep(0,29)) # control framing
+cf_dn_low_ing <- c(0,1,rep(0,28))
+cf_conv_low_ing <- c(0,0,1,rep(0,27))
+cf_sn_low_ing <- c(0,0,0,1,rep(0,26))
+cf_mn_low_ing <- c(rep(0,4),1,(rep(0,25)))
+
+cf_cn_hi_ing <- c(rep(0,5),1,(rep(0,24))) 
+cf_dn_hi_ing <- c(rep(0,6),1,(rep(0,23)))
+cf_conv_hi_ing <- c(rep(0,7),1,(rep(0,22)))
+cf_sn_hi_ing <- c(rep(0,8),1,(rep(0,21)))
+cf_mn_hi_ing <- c(rep(0,9),1,(rep(0,20)))
+
+
+pf_cn_low_ing <- c(rep(0,10),1,(rep(0,19))) # pro-environmental framing
+pf_dn_low_ing <- c(rep(0,11),1,(rep(0,18)))
+pf_conv_low_ing <- c(rep(0,12),1,(rep(0,17)))
+pf_sn_low_ing <- c(rep(0,13),1,(rep(0,16)))
+pf_mn_low_ing <- c(rep(0,14),1,(rep(0,15)))
+
+pf_cn_hi_ing <- c(rep(0,15),1,(rep(0,14))) 
+pf_dn_hi_ing <- c(rep(0,16),1,(rep(0,13)))
+pf_conv_hi_ing <- c(rep(0,17),1,(rep(0,12)))
+pf_sn_hi_ing <- c(rep(0,18),1,(rep(0,11)))
+pf_mn_hi_ing <- c(rep(0,19),1,(rep(0,10)))
+
+
+sf_cn_low_ing <- c(rep(0,20),1,(rep(0,9))) # self-enhancing framing
+sf_dn_low_ing <- c(rep(0,21),1,(rep(0,8)))
+sf_conv_low_ing <- c(rep(0,22),1,(rep(0,7)))
+sf_sn_low_ing <- c(rep(0,23),1,(rep(0,6)))
+sf_mn_low_ing <- c(rep(0,24),1,(rep(0,5)))
+
+sf_cn_hi_ing <- c(rep(0,25),1,(rep(0,4))) 
+sf_dn_hi_ing <- c(rep(0,26),1,(rep(0,3)))
+sf_conv_hi_ing <- c(rep(0,27),1,(rep(0,2)))
+sf_sn_hi_ing <- c(rep(0,28),1,(rep(0,1)))
+sf_mn_hi_ing <- c(rep(0,29),1)
+```
+
+
+Effect of norm for people low vs high on ingroup identification across framing conditions
+
+#### Control framing
+```{r}
+controlframe_lowvshi_ing <- contrast(combinations, 
+                       method = list("CF/DN/LowIng - CF/CN/LowIng" = cf_dn_low_ing - cf_cn_low_ing,
+                                     "CF/Conv/LowIng - CF/CN/LowIng" = cf_conv_low_ing - cf_cn_low_ing,
+                                     "CF/SN/LowIng - CF/CN/LowIng" = cf_sn_low_ing - cf_cn_low_ing,
+                                     "CF/MN/LowIng - CF/CN/LowIng" = cf_mn_low_ing - cf_cn_low_ing,
+                                     "CF/DN/HiIng - CF/CN/HiIng" = cf_dn_hi_ing - cf_cn_hi_ing,
+                                     "CF/Conv/HiIng - CF/CN/HiIng" = cf_conv_hi_ing - cf_cn_hi_ing,
+                                     "CF/SN/HiIng - CF/CN/HiIng" = cf_sn_hi_ing - cf_cn_hi_ing,
+                                     "CF/MN/HiIng - CF/CN/HiIng" = cf_mn_hi_ing - cf_cn_hi_ing), 
+                       adjust = "none")
+
+controlframe_lowvshi_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+controlframe_lowvshi_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+```
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+controlframe_lowvshi_ing
+
+dn_vs_c_LowIng <- c(1,rep(0,7))
+conv_vs_c_LowIng <- c(0,1,rep(0,6))
+sn_vs_c_LowIng <- c(0,0,1,rep(0,5))
+mn_vs_c_LowIng <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiIng <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiIng <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiIng <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiIng <- c(rep(0,7),1)
+```
+
+```{r}
+compare_ing <- contrast(controlframe_lowvshi_ing, method = list("Effect of DN (Low - High ing)" = dn_vs_c_LowIng - dn_vs_c_HiIng, 
+                                                                "Effect of Conv (Low - High ing)" = conv_vs_c_LowIng - conv_vs_c_HiIng,
+                                                                "Effect of SN (Low - High ing)" = sn_vs_c_LowIng - sn_vs_c_HiIng,
+                                                                "Effect of MN (Low - High ing)" = mn_vs_c_LowIng - mn_vs_c_HiIng), adjust = "none")
+
+compare_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+```
+
+
+
+#### Pro-environmental framing
+```{r}
+proenvframe_lowvshi_ing <- contrast(combinations, 
+                       method = list("PF/DN/LowIng - PF/CN/LowIng" = pf_dn_low_ing - pf_cn_low_ing,
+                                     "PF/Conv/LowIng - PF/CN/LowIng" = pf_conv_low_ing - pf_cn_low_ing,
+                                     "PF/SN/LowIng - PF/CN/LowIng" = pf_sn_low_ing - pf_cn_low_ing,
+                                     "PF/MN/LowIng - PF/CN/LowIng" = pf_mn_low_ing - pf_cn_low_ing,
+                                     "PF/DN/HiIng - PF/CN/HiIng" = pf_dn_hi_ing - pf_cn_hi_ing,
+                                     "PF/Conv/HiIng - PF/CN/HiIng" = pf_conv_hi_ing - pf_cn_hi_ing,
+                                     "PF/SN/HiIng - PF/CN/HiIng" = pf_sn_hi_ing - pf_cn_hi_ing,
+                                     "PF/MN/HiIng - PF/CN/HiIng" = pf_mn_hi_ing - pf_cn_hi_ing), 
+                       adjust = "none")
+
+proenvframe_lowvshi_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+proenvframe_lowvshi_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+```
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+proenvframe_lowvshi_ing
+
+dn_vs_c_LowIng <- c(1,rep(0,7))
+conv_vs_c_LowIng <- c(0,1,rep(0,6))
+sn_vs_c_LowIng <- c(0,0,1,rep(0,5))
+mn_vs_c_LowIng <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiIng <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiIng <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiIng <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiIng <- c(rep(0,7),1)
+```
+
+```{r}
+compare_ing <- contrast(proenvframe_lowvshi_ing, method = list("Effect of DN (Low - High ing)" = dn_vs_c_LowIng - dn_vs_c_HiIng, 
+                                                                "Effect of Conv (Low - High ing)" = conv_vs_c_LowIng - conv_vs_c_HiIng,
+                                                                "Effect of SN (Low - High ing)" = sn_vs_c_LowIng - sn_vs_c_HiIng,
+                                                                "Effect of MN (Low - High ing)" = mn_vs_c_LowIng - mn_vs_c_HiIng), adjust = "none")
+
+compare_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+```
+
+
+
+#### Self-enhancing framing
+```{r}
+selfenhframe_lowvshi_ing <- contrast(combinations, 
+                       method = list("SF/DN/LowIng - SF/CN/LowIng" = sf_dn_low_ing - sf_cn_low_ing,
+                                     "SF/Conv/LowIng - SF/CN/LowIng" = sf_conv_low_ing - sf_cn_low_ing,
+                                     "SF/SN/LowIng - SF/CN/LowIng" = sf_sn_low_ing - sf_cn_low_ing,
+                                     "SF/MN/LowIng - SF/CN/LowIng" = sf_mn_low_ing - sf_cn_low_ing,
+                                     "SF/DN/HiIng - SF/CN/HiIng" = sf_dn_hi_ing - sf_cn_hi_ing,
+                                     "SF/Conv/HiIng - SF/CN/HiIng" = sf_conv_hi_ing - sf_cn_hi_ing,
+                                     "SF/SN/HiIng - SF/CN/HiIng" = sf_sn_hi_ing - sf_cn_hi_ing,
+                                     "SF/MN/HiIng - SF/CN/HiIng" = sf_mn_hi_ing - sf_cn_hi_ing), 
+                       adjust = "none")
+
+selfenhframe_lowvshi_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+selfenhframe_lowvshi_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+```
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+selfenhframe_lowvshi_ing
+
+dn_vs_c_LowIng <- c(1,rep(0,7))
+conv_vs_c_LowIng <- c(0,1,rep(0,6))
+sn_vs_c_LowIng <- c(0,0,1,rep(0,5))
+mn_vs_c_LowIng <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiIng <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiIng <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiIng <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiIng <- c(rep(0,7),1)
+```
+
+```{r}
+compare_ing <- contrast(selfenhframe_lowvshi_ing, method = list("Effect of DN (Low - High ing)" = dn_vs_c_LowIng - dn_vs_c_HiIng, 
+                                                                "Effect of Conv (Low - High ing)" = conv_vs_c_LowIng - conv_vs_c_HiIng,
+                                                                "Effect of SN (Low - High ing)" = sn_vs_c_LowIng - sn_vs_c_HiIng,
+                                                                "Effect of MN (Low - High ing)" = mn_vs_c_LowIng - mn_vs_c_HiIng), adjust = "none")
+
+compare_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+compare_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+```
+
+
+
+>>H5: In-group identification will moderate the effect of norm-intervention condition on people’s clothing consumption intentions and behaviors such that the effect of each norm-intervention condition will be stronger when people are high, versus low, on in-group identification.
+
+
+### Storing low (-1SD) and high (+1SD) ingroup identification
+```{r}
+sd_below <- mean(average_df$ingroup_center) - sd(average_df$ingroup_center)
+sd_above <- mean(average_df$ingroup_center) + sd(average_df$ingroup_center)
+```
+
+
+### Calculate EM Means at low and high bio
+```{r}
+atlist <- list(ingroup_center = c(sd_below, sd_above))
+
+combinations <- emmeans(log_mice, ~ norm_condition*ingroup_center, at=atlist, type = "response")
+
+combinations %>% knitr::kable(digits = 2)
+```
+
+### Custom contrasts
+```{r}
+cn_low_ing <- c(1,rep(0,9))
+dn_low_ing <- c(0,1,rep(0,8))
+conv_low_ing <- c(0,0,1,rep(0,7))
+sn_low_ing <- c(rep(0,3),1,rep(0,6))
+mn_low_ing <- c(rep(0,4),1,rep(0,5))
+
+cn_hi_ing <- c(rep(0,5),1,rep(0,4))
+dn_hi_ing <- c(rep(0,6),1,rep(0,3))
+conv_hi_ing <- c(rep(0,7),1,rep(0,2))
+sn_hi_ing <- c(rep(0,8),1,rep(0,1))
+mn_hi_ing <- c(rep(0,9),1)
+```
+
+
+```{r}
+norm_effect_ing <- contrast(combinations, 
+                       method = list("DN Low Ing - Control Low Ing" = dn_low_ing - cn_low_ing,
+                                     "Conv Low Ing - Control Low Ing" = conv_low_ing - cn_low_ing,
+                                     "SN Low Ing - Control Low Ing" = sn_low_ing - cn_low_ing,
+                                     "MN Low Ing - Control Low Ing" = mn_low_ing - cn_low_ing,
+                                     "DN Hi Ing - Control Hi Ing" = dn_hi_ing - cn_hi_ing,
+                                     "Conv Hi Ing - Control Hi Ing" = conv_hi_ing - cn_hi_ing,
+                                     "SN Hi Ing - Control Hi Ing" = sn_hi_ing - cn_hi_ing,
+                                     "MN Hi Ing - Control Hi Ing" = mn_hi_ing - cn_hi_ing), 
+                       adjust = "none")
+
+norm_effect_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+norm_effect_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+```
+
+Planned Comparisons
+
+Custom contrasts
+```{r}
+norm_effect_ing
+
+dn_vs_c_LowIng <- c(1,rep(0,7))
+conv_vs_c_LowIng <- c(0,1,rep(0,6))
+sn_vs_c_LowIng <- c(0,0,1,rep(0,5))
+mn_vs_c_LowIng <- c(0,0,0,1,rep(0,4))
+
+dn_vs_c_HiIng <- c(rep(0,4),1,rep(0,3))
+conv_vs_c_HiIng <- c(rep(0,5),1,rep(0,2))
+sn_vs_c_HiIng <- c(rep(0,6),1,rep(0,1))
+mn_vs_c_HiIng <- c(rep(0,7),1)
+```
+
+```{r}
+norm_compare_ing <- contrast(norm_effect_ing, method = list("Effect of DN (Low - High ing)" = dn_vs_c_LowIng - dn_vs_c_HiIng, 
+                                                                "Effect of Conv (Low - High ing)" = conv_vs_c_LowIng - conv_vs_c_HiIng,
+                                                                "Effect of SN (Low - High ing)" = sn_vs_c_LowIng - sn_vs_c_HiIng,
+                                                                "Effect of MN (Low - High ing)" = mn_vs_c_LowIng - mn_vs_c_HiIng), adjust = "none")
+
+norm_compare_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+norm_compare_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+```

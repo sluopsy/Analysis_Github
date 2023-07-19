@@ -1,27 +1,17 @@
 ---
 title: "Analysis using Multiple Imputation (scmfcs)"
 output:
-  word_document:
-    toc: yes
-    toc_depth: '3'
   html_document:
     toc: yes
     toc_depth: 3
     toc_float: yes
+  word_document:
+    toc: yes
+    toc_depth: '3'
 date: "2023-03-29"
 editor_options:
   chunk_output_type: console
 ---
-
-To do:
-
-  * add CIs to simple slope comparison tables?
-    + should CIs or effect sizes be added?
-  * how to test H3?
-  * logistic analysis
-    + simple effects?
-    + marginal means/descriptives?
-  * regression diagnostics for multiply imputed model
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
@@ -59,6 +49,8 @@ library(car) # for Anova function (type III ss)
 library(lsr) # for etaSquared
 library(modeest) # for mode (using mlv function)
 library(cowplot) # for plot_grid to display multiple plots
+library(pwr)
+library(pwr2)
 
 
 options(max.print = 100000) # max rows to print in output
@@ -1269,11 +1261,11 @@ hist(imp5_data$Age, main = "Histogram of Age", xlab = "Age", ylab = "Frequency",
 # Regression Analysis (DV = Consumer Intentions)
 
 ## Running Model
-```{r echo = FALSE}
+```{r include = FALSE}
 mod_mice <- with(mids_obj, lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center))
 ```
 
-```{r echo = FALSE}
+```{r include = FALSE}
 pool_obj <- pool(mod_mice)
 pool_obj
 ```
@@ -1296,13 +1288,10 @@ apa_table(pool_summ,
 ```
 
 
-
-
-
 ## Standardized Regression Coefficients
 
 Using scale()
-```{r echo = FALSE}
+```{r include = FALSE}
 mod_mice_std <- with(mids_obj, lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age)))
 ```
 
@@ -1323,47 +1312,13 @@ apa_table(pool_summ_std,
 
 
 
-## Model Comparisons for Testing Interactions
-
-biospheric
-```{r}
-mod_bio <- with(mids_obj, lm(consumer_intentions ~ framing_condition + norm_condition + altruistic_center + egoistic_center + hedonic_center + ingroup_center + framing_condition:norm_condition + framing_condition:biospheric_center + norm_condition:biospheric_center + framing_condition:norm_condition:biospheric_center + framing_condition:altruistic_center + norm_condition:altruistic_center + framing_condition:norm_condition:altruistic_center + framing_condition:egoistic_center + norm_condition:egoistic_center + framing_condition:norm_condition:egoistic_center + framing_condition:hedonic_center + norm_condition:hedonic_center + framing_condition:norm_condition:hedonic_center + framing_condition:ingroup_center + norm_condition:ingroup_center + framing_condition:norm_condition:ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center))
-```
-
-Full model results
-```{r include = FALSE}
-mod_bio
-```
-
-
-```{r}
-anova(mod_mice, mod_bio)
-D2(mod_mice, mod_bio)
-```
-
-
-
-
-
 ## Pooled Anova Results
-
-
-Using Anova()
-```{r include = FALSE, echo = FALSE, warning = FALSE}
-#anova_mod2 <- with(mids_obj, Anova(lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center), type = "III"))
-```
-
-```{r}
-#anova_mod2
-```
-
-
 
 Using mi.anova()
 
 - Uses D2 test
-```{r}
-anova_mod3 <- mi.anova(mi.res = mids_obj, formula = "consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center")
+```{r include = FALSE}
+anova_mod3 <- mi.anova(mi.res = mids_obj, formula = "consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center", type = 3)
 ```
 
 ```{r}
@@ -1372,304 +1327,19 @@ anova_mod3 %>%
 ```
 
 
-## Analysis in each imputed data set 
-
-### Imputed Data 1
-```{r echo = FALSE}
-#data_imp1a <- complete_data %>%
- # filter(.imp == 1)
-
-data_imp1 <- impobject$imputations[[1]]
-
-mod_mice_imp1 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp1)
+Using Anova()
+```{r include = FALSE, echo = FALSE, warning = FALSE}
+anova_mod2 <- with(mids_obj, Anova(lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center), type = "III"))
 ```
 
-#### Regression summary
-```{r include = FALSE}
-summary_imp1 <- summary(mod_mice_imp1)
-summary_imp1
-```
-
-Succinct summary
-```{r echo = FALSE}
-summary_imp1_print <- summary_imp1$coefficients
-
-summary_imp1_print  %>%
-  knitr::kable(digits = c(2, 2, 2, 3))
-```
-
-
-APA style table for regression summary
+doesn't have a pooling option
 ```{r}
-apa_summ_imp1 <- apa_print(summary_imp1)
-
-apa_summ_imp1$table %>%
-apa_table(caption = "Table 2 Regression Results Using Imputed Data 1",
-          note = "DV = Consumer Intentions")
-```
-
-
-Standardized regression coefficients
-```{r include = FALSE}
-std_imp1 <- lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age), data = data_imp1)
-
-summ_std_imp1 <- summary(std_imp1)
-```
-
-APA summary of standardized coefficients
-```{r}
-print_summ_std_imp1 <- apa_print(summ_std_imp1)
-
-apa_table(print_summ_std_imp1)
-```
-
-
-#### ANOVA summary
-```{r}
-anova(mod_mice_imp1) %>%
-  knitr::kable(digits = c(1, 2, 2, 2, 3))
-```
-
-Effect Size
-```{r}
-etaSquared(mod_mice_imp1) %>% 
-  knitr::kable(digits = 3)
-```
-
-
-### Imputed Data 2
-```{r}
-data_imp2 <- impobject$imputations[[2]]
-
-mod_mice_imp2 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp2)
-```
-
-#### Regression summary
-```{r include = FALSE, echo = FALSE}
-summary_imp2 <- summary(mod_mice_imp2)
-summary_imp2
-```
-
-Succinct summary
-```{r echo = FALSE} 
-summary_imp2$coefficients %>%
-  knitr::kable(digits = c(2, 2, 2, 3))
-```
-
-APA style table for regression summary
-```{r}
-apa_summ_imp2 <- apa_print(summary_imp2)
-
-apa_summ_imp2$table %>%
-apa_table(caption = "Table 3 Regression Results Using Imputed Data 2",
-          note = "DV = Consumer Intentions")
-```
-
-
-Standardized regression coefficients
-```{r include = FALSE}
-std_imp2 <- lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age), data = data_imp2)
-
-summ_std_imp2 <- summary(std_imp2)
-```
-
-APA summary of standardized coefficients
-```{r}
-print_summ_std_imp2 <- apa_print(summ_std_imp2)
-
-apa_table(print_summ_std_imp2)
-```
-
-
-#### ANOVA summary
-```{r}
-anova(mod_mice_imp2) %>%
-  knitr::kable(digits = c(1, 2, 2, 2, 3))
-```
-
-Effect Size
-```{r}
-etaSquared(mod_mice_imp2) %>% 
-  knitr::kable(digits = 3)
-```
-
-
-### Imputed Data 3
-```{r echo = FALSE}
-data_imp3 <- impobject$imputations[[3]]
-
-mod_mice_imp3 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp3)
-```
-
-#### Regression summary
-```{r include = FALSE, echo = FALSE}
-summary_imp3 <- summary(mod_mice_imp3)
-summary_imp3
-```
-
-Succinct summary
-```{r}
-summary_imp3$coefficients %>%
-  knitr::kable(digits = c(2, 2, 2, 3))
-```
-
-APA style table for regression summary
-```{r}
-apa_summ_imp3 <- apa_print(summary_imp3)
-
-apa_summ_imp3$table %>%
-apa_table(caption = "Table 4 Regression Results Using Imputed Data 3",
-          note = "DV = Consumer Intentions")
-```
-
-
-Standardized regression coefficients
-```{r include = FALSE}
-std_imp3 <- lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age), data = data_imp3)
-
-summ_std_imp3 <- summary(std_imp3)
-```
-
-APA summary of standardized coefficients
-```{r}
-print_summ_std_imp3 <- apa_print(summ_std_imp3)
-
-apa_table(print_summ_std_imp1)
-```
-
-
-#### ANOVA summary
-```{r}
-anova(mod_mice_imp3) %>%
-  knitr::kable(digits = c(1, 2, 2, 2, 3))
-```
-
-Effect Size
-```{r}
-etaSquared(mod_mice_imp3) %>% 
-  knitr::kable(digits = 3)
-```
-
-
-### Imputed Data 4
-```{r echo = FALSE}
-data_imp4 <- impobject$imputations[[4]]
-
-mod_mice_imp4 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp4)
-```
-
-#### Regression summary
-```{r include = FALSE, echo = FALSE}
-summary_imp4 <- summary(mod_mice_imp4)
-summary_imp4
-```
-
-Succinct summary
-```{r echo = FALSE}
-summary_imp4$coefficients %>%
-  knitr::kable(digits = c(2, 2, 2, 3))
-```
-
-
-APA style table for regression summary
-```{r}
-apa_summ_imp4 <- apa_print(summary_imp4)
-
-apa_summ_imp4$table %>%
-apa_table(caption = "Table 5 Regression Results Using Imputed Data 4",
-          note = "DV = Consumer Intentions")
-```
-
-
-Standardized regression coefficients
-```{r include = FALSE}
-std_imp4 <- lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age), data = data_imp4)
-
-summ_std_imp4 <- summary(std_imp4)
-```
-
-APA summary of standardized coefficients
-```{r}
-print_summ_std_imp4 <- apa_print(summ_std_imp4)
-
-apa_table(print_summ_std_imp4)
-```
-
-
-#### ANOVA summary
-```{r}
-anova(mod_mice_imp4) %>%
-  knitr::kable(digits = c(1, 2, 2, 2, 3))
-```
-
-Effect Size
-```{r}
-etaSquared(mod_mice_imp4) %>% 
-  knitr::kable(digits = 3)
+# anova_mod2
 ```
 
 
 
-### Imputed Data 5
-```{r echo = FALSE}
-data_imp5 <- impobject$imputations[[5]]
-
-mod_mice_imp5 <-lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center, data = data_imp5)
-```
-
-#### Regression summary
-```{r include = FALSE, echo = FALSE}
-summary_imp5 <- summary(mod_mice_imp5)
-summary_imp5
-```
-
-Succinct summary
-```{r echo = FALSE}
-summary_imp5$coefficients %>%
-  knitr::kable(digits = c(2, 2, 2, 3))
-```
-
-APA style table for regression summary
-```{r}
-apa_summ_imp5 <- apa_print(summary_imp5)
-
-apa_summ_imp5$table %>%
-apa_table(caption = "Table 6 Regression Results Using Imputed Data 5",
-          note = "DV = Consumer Intentions")
-```
-
-
-Standardized regression coefficients
-```{r include = FALSE}
-std_imp5 <- lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age), data = data_imp5)
-
-summ_std_imp5 <- summary(std_imp5)
-```
-
-APA summary of standardized coefficients
-```{r}
-print_summ_std_imp5 <- apa_print(summ_std_imp5)
-
-apa_table(print_summ_std_imp5)
-```
-
-
-#### ANOVA summary
-```{r}
-anova(mod_mice_imp5) %>%
-  knitr::kable(digits = c(1, 2, 2, 2, 3))
-```
-
-Effect Size
-```{r}
-etaSquared(mod_mice_imp5) %>% 
-  knitr::kable(digits = 3)
-```
-
-
-
-
-## Simple Effects
+# Simple Effects
 
 Averaging scores across imputations
 ```{r}
@@ -1724,29 +1394,67 @@ text_settings <- theme(text = element_text(size = 20)) +
 ## Estimated Marginal Means
 ```{r}
 cell_emmeans <- emmeans(mod_mice, ~ norm_condition*framing_condition)
-cell_emmeans
+cell_emmeans %>%
+  knitr::kable(digits = c(NA,NA,2,2,2,2,3))
 
 frame_emmeans <- emmeans(mod_mice, ~ framing_condition)
-frame_emmeans
+frame_emmeans %>%
+  knitr::kable(digits = 2)
 
 norm_emmeans <- emmeans(mod_mice, ~ norm_condition)
-norm_emmeans
+norm_emmeans %>%
+  knitr::kable(digits = 2)
 ```
 
 
-### Framing Condition
+## Framing Condition
 
 >>H1: Consumer intentions/behaviors will be lower in the self-enhancing framing than in the pro-environmental or control framing conditions.
 
 Comparing each level of framing condition
 ```{r}
-frame_means <- emmeans(mod_mice, pairwise ~ framing_condition, adjust = "none")
+frame_emmeans
 
-frame_means$emmeans %>%
+# custom contrasts
+SE_F_EMM <- c(0,0,1)
+C_F_EMM <- c(1,0,0)
+PE_F_EMM <- c(0,1,0)
+
+framing_comparisons <- contrast(frame_emmeans, 
+                          method = list("SE Frame - Control Frame" = SE_F_EMM - C_F_EMM,
+                                        "SE Frame - PE Frame" = SE_F_EMM - PE_F_EMM,
+                                        "PE Frame - Control" = PE_F_EMM - C_F_EMM), adjust = "none")
+                          
+framing_comparisons %>%
+  knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+framing_comparisons %>% confint() %>%
   knitr::kable(digits = 2)
 
-frame_means$contrasts %>%
-  knitr::kable(digits = 3)
+# effect sizes
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(framing_comparisons, sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
+```
+
+
+Exploratory multiple comparisons
+```{r}
+# All pairwise comparisons of framing conditions
+frame_means2 <- emmeans(mod_mice, pairwise ~ framing_condition, adjust = "none")
+
+framing_comparisons2 <- contrast(frame_means2)
+framing_comparisons2 %>%
+  knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+framing_comparisons2 %>% confint() %>%
+  knitr::kable(digits = 2)
+
+# effect sizes
+eff_size(framing_comparisons2, sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
 ```
 
 
@@ -1754,42 +1462,64 @@ frame_means$contrasts %>%
 # without data overlaid
 emmip(mod_mice, ~ framing_condition, CIs = TRUE, CIarg = list(lwd = 2, alpha = 0.5), xlab = "Framing Condition", ylab = "Consumer Intentions") + scale_x_discrete(breaks=c("control_framing","pro_env_framing","self_enh_framing"),
         labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +theme_apa() + text_settings
-                                                                                                                      
+                                                                                                       
 # with data overlaid (scores averaged across imputations)
 emmip(mod_mice, ~ framing_condition, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.5), xlab = "Framing Condition", ylab = "Consumer Intentions") + geom_point(data = average_df, aes(x = framing_condition, y = consumer_intentions), alpha = 0.1, color = "blue") + scale_x_discrete(breaks=c("control_framing","pro_env_framing","self_enh_framing"),
         labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa() + text_settings
 ```
 
 
-* Intentions are highest in the pro-environmental condition
-
-* No significant difference in consumer intentions between the pro-environmental and self-enhancing framing conditions, t(1039) = 1.33, p = .184
-* No significant difference in consumer intentions between the pro-environmental and control framing conditions, t(1039) = -1.85, p = .064
-* No significant difference in consumer intentions between the self-enhancing and control framing conditions, t(1039) = -0.54, p = .592
 
 
-Effect Sizes (Cohen's D)
-```{r}
-sigma_pool <- mean(pool_obj$glanced$sigma)
-df_resid_pool <- mean(pool_obj$glanced$df.residual)
 
-eff_size(frame_means, sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
-```
-
-
-### Norm Condition
+## Norm Condition
 
 >>H2: Consumer intentions/behaviors will be lower in each norm condition compared to the control norm condition.
 
-Comparing each level of norm condition:
+Comparing each level of norm condition
 ```{r}
-norm_means <- emmeans(mod_mice, pairwise ~ norm_condition, adjust = "none")
+norm_emmeans
 
-norm_means$emmeans %>% 
+# custom contrasts
+Control_N_EMM <- c(1,0,0,0,0)
+DN_EMM <- c(0,1,0,0,0)
+Conv_EMM <- c(0,0,1,0,0)
+SN_EMM <- c(0,0,0,1,0)
+MN_EMM <- c(0,0,0,0,1)
+
+norm_comparisons <- contrast(norm_emmeans, 
+                          method = list("Descriptive Norm - Control" = DN_EMM - Control_N_EMM,
+                                        "Convention - Control" = Conv_EMM - Control_N_EMM,
+                                        "Social Norm - Control" = SN_EMM - Control_N_EMM,
+                                        "Moral Norm - Control" = MN_EMM - Control_N_EMM), adjust = "none")
+
+                          
+norm_comparisons %>%
+  knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+norm_comparisons %>% confint() %>%
   knitr::kable(digits = 2)
 
-norm_means$contrasts %>%
-  knitr::kable(digits = 3)
+# effect sizes
+eff_size(norm_comparisons, sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
+```
+
+Exploratory multiple comparisons
+```{r}
+# All pairwise comparisons of framing conditions
+norm_means2 <- emmeans(mod_mice, pairwise ~ norm_condition, adjust = "none")
+
+norm_comparisons2 <- contrast(norm_means2)
+norm_comparisons2 %>%
+  knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+norm_comparisons2 %>% confint() %>%
+  knitr::kable(digits = 2)
+
+# effect sizes
+eff_size(norm_comparisons2, sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
 ```
 
 
@@ -1803,37 +1533,144 @@ emmip(mod_mice, ~ norm_condition, CIs = TRUE, xlab = "Norm Condition", ylab = "C
 ```
 
 
-* There was no significant difference between any norm condition compared to the control condition (all ps > .129)
 
-Effect Sizes (Cohen's D):
-```{r}
-eff_size(norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
-  knitr::kable(digits = 2)
-```
-
-
-Exploratory finding:
-
-* Intentions were significantly higher in the convention versus the social norm condition, t(1039) = 2.20, p = .028.
-
-
-
-### Framing X Norm
+## Framing X Norm
 
 >>H3: There will be a two-way interaction between framing & norm condition such that the effect of each norm will be stronger in the self-enhancing framing than in the pro-environmental or control framing conditions.
 
-
-Effect of norm condition at each level of framing condition:
+Comparing differences in cell means
 ```{r}
-cell_means <- emmeans(mod_mice, pairwise ~ norm_condition | framing_condition, adjust = "none")
+cell_emmeans
 
-cell_means$emmeans %>%
+# custom contrasts
+cf_cn_emm <- c(1,rep(0,14)) ## control framings
+cf_dn_emm <- c(0,1,rep(0,13))
+cf_conv_emm <- c(0,0,1,rep(0,12))
+cf_sn_emm <- c(0,0,0,1,rep(0,11))
+cf_mn_emm <- c(0,0,0,0,1,rep(0,10))
+
+pf_cn_emm <- c(0,0,0,0,0,1,rep(0,9)) ## pro-environmental framings
+pf_dn_emm <- c(0,0,0,0,0,0,1,rep(0,8))
+pf_conv_emm <- c(rep(0,7),1,(rep(0,7)))
+pf_sn_emm <- c(rep(0,8),1,(rep(0,6)))
+pf_mn_emm <- c(rep(0,9),1,(rep(0,5)))
+
+sf_cn_emm <- c(rep(0,10),1,(rep(0,4))) ## self-enhancing framings
+sf_dn_emm <- c(rep(0,11),1,(rep(0,3)))
+sf_conv_emm <- c(rep(0,12),1,(rep(0,2)))
+sf_sn_emm <- c(rep(0,13),1,0)
+sf_mn_emm <- c(rep(0,14),1)
+
+FxN_comparisons <- contrast(cell_emmeans, 
+                          method = list("Control Frame + DN - Control Frame + Ctrl" = cf_dn_emm - cf_cn_emm,
+                                        "Control Frame + Conv - Control Frame + Ctrl" = cf_conv_emm - cf_cn_emm,
+                                        "Control Frame + SN - Control Frame + Ctrl" = cf_sn_emm - cf_cn_emm,
+                                        "Control Frame + MN - Control Frame + Ctrl" = cf_mn_emm - cf_cn_emm,
+                                        "PE Frame + DN - PE Frame + Ctrl" = pf_dn_emm - pf_cn_emm,
+                                        "PE Frame + Conv - PE Frame + Ctrl" = pf_conv_emm - pf_cn_emm,
+                                        "PE Frame + SN - PE Frame + Ctrl" = pf_sn_emm - pf_cn_emm,
+                                        "PE Frame + MN - PE Frame + Ctrl" = pf_mn_emm - pf_cn_emm,
+                                        "SE Frame + DN - SE Frame + Ctrl" = sf_dn_emm - sf_cn_emm,
+                                        "SE Frame + Conv - SE Frame + Ctrl" = sf_conv_emm - sf_cn_emm,
+                                        "SE Frame + SN - SE Frame + Ctrl" = sf_sn_emm - sf_cn_emm,
+                                        "SE Frame + MN - SE Frame + Ctrl" = sf_mn_emm - sf_cn_emm), adjust = "none")
+
+FxN_comparisons %>%
+  knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+FxN_comparisons %>% confint() %>%
   knitr::kable(digits = 2)
-
-cell_means$contrasts %>%
-  knitr::kable(digits = 3)
 ```
 
+Pairwise comparisons
+
+```{r}
+FxN_comparisons
+
+# custom contrasts
+control_DN_vs_C <- c(1,rep(0,11))
+control_Conv_vs_C <- c(0,1,rep(0,10))
+control_SN_vs_C <- c(0,0,1,rep(0,9))
+control_MN_vs_C <- c(0,0,0,1,rep(0,8))
+
+p_DN_vs_C <- c(rep(0,4),1,rep(0,7))
+p_Conv_vs_C <- c(rep(0,5),1,(rep(0,6)))
+p_SN_vs_C <- c(rep(0,6),1,rep(0,5))
+p_MN_vs_C <- c(rep(0,7),1,rep(0,4))
+
+s_DN_vs_C <- c(rep(0,8),1,rep(0,3))
+s_Conv_vs_C <- c(rep(0,9),1,rep(0,2))
+s_SN_vs_C <- c(rep(0,10),1,0)
+s_MN_vs_C <- c(rep(0,11),1)
+
+
+FxN_pairwise <- contrast(FxN_comparisons, method = list("SE vs Control: DN - Control" = s_DN_vs_C - control_DN_vs_C,
+                                                        "SE vs Control: Conv - Control" = s_Conv_vs_C - control_Conv_vs_C,
+                                                        "SE vs Control: SN - Control" = s_SN_vs_C - control_SN_vs_C,
+                                                        "SE vs Control: MN - Control" = s_MN_vs_C - control_MN_vs_C,
+                                                        "SE vs PE: DN - Control" = s_DN_vs_C - p_DN_vs_C,
+                                                        "SE vs PE: Conv - Control" = s_Conv_vs_C - p_Conv_vs_C,
+                                                        "SE vs PE: SN - Control" = s_SN_vs_C - p_SN_vs_C,
+                                                        "SE vs PE: MN - Control" = s_MN_vs_C - p_MN_vs_C,
+                                                        "PE vs Control: DN - Control" = p_DN_vs_C - control_DN_vs_C,
+                                                        "PE vs Control: Conv - Control" = p_Conv_vs_C - control_Conv_vs_C,
+                                                        "PE vs Control: SN - Control" = p_SN_vs_C - control_SN_vs_C,
+                                                        "PE vs Control: MN - Control" = p_MN_vs_C - control_MN_vs_C), adjust = "none")
+
+
+FxN_pairwise %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidencce intervals
+FxN_pairwise %>%
+  confint() %>%
+  knitr::kable(digits = 2)
+
+# effect sizes
+eff_size(FxN_comparisons, method = list("SE vs Control: DN - Control" = s_DN_vs_C - control_DN_vs_C,
+                                                        "SE vs Control: Conv - Control" = s_Conv_vs_C - control_Conv_vs_C,
+                                                        "SE vs Control: SN - Control" = s_SN_vs_C - control_SN_vs_C,
+                                                        "SE vs Control: MN - Control" = s_MN_vs_C - control_MN_vs_C,
+                                                        "SE vs PE: DN - Control" = s_DN_vs_C - p_DN_vs_C,
+                                                        "SE vs PE: Conv - Control" = s_Conv_vs_C - p_Conv_vs_C,
+                                                        "SE vs PE: SN - Control" = s_SN_vs_C - p_SN_vs_C,
+                                                        "SE vs PE: MN - Control" = s_MN_vs_C - p_MN_vs_C,
+                                                        "PE vs Control: DN - Control" = p_DN_vs_C - control_DN_vs_C,
+                                                        "PE vs Control: Conv - Control" = p_Conv_vs_C - control_Conv_vs_C,
+                                                        "PE vs Control: SN - Control" = p_SN_vs_C - control_SN_vs_C,
+                                                        "PE vs Control: MN - Control" = p_MN_vs_C - control_MN_vs_C), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
+```
+
+
+
+Exploratory multiple comparisons
+```{r}
+# All pairwise comparisons of norm conditions across framing conditions
+norm_means2 <- emmeans(mod_mice, pairwise ~ norm_condition | framing_condition, adjust = "none")
+
+norm_means2$emmeans %>% knitr::kable(digits = 2)
+
+norm_comparisons2 <- norm_means2$contrasts
+norm_comparisons2 %>%
+  knitr::kable(digits = c(NA,NA,2,2,2,2,3))
+
+# confidence intervals
+norm_comparisons2 %>% confint() %>%
+  knitr::kable(digits = 2)
+
+# effect sizes
+eff_size(norm_comparisons2, sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
+```
+
+Pairwise comparisons
+```{r}
+norm2_pairwise <- contrast(norm_comparisons2, "pairwise")
+
+norm2_pairwise %>% knitr::kable(digits = c(NA,NA,2,2,2,2,3))
+
+# effect sizes
+eff_size(norm2_pairwise, sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
+```
 
 
 ```{r}
@@ -1846,19 +1683,85 @@ emmip(mod_mice, ~ norm_condition | framing_condition, CIs = TRUE, CIarg = list(l
         labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa() + text_settings
 ```
 
-* Differences between the control norm condition & other norm conditions were not significant within any of the framing conditions.
 
-Effect Sizes (Cohen's D):
+
+
+## All control/framing conditions compared to control/control condition
+
+>> Exploratory RQ2: Which combination of framing and norm condition produced the strongest reductions in consumer intentions compared to the control condition?
+
 ```{r}
-eff_size(cell_means, sigma = sigma_pool, edf = df_resid_pool) %>%
+cell_emmeans
+
+# custom contrasts
+cf_cn_emm <- c(1,rep(0,14)) ## control framings
+cf_dn_emm <- c(0,1,rep(0,13))
+cf_conv_emm <- c(0,0,1,rep(0,12))
+cf_sn_emm <- c(0,0,0,1,rep(0,11))
+cf_mn_emm <- c(0,0,0,0,1,rep(0,10))
+
+pf_cn_emm <- c(0,0,0,0,0,1,rep(0,9)) ## pro-environmental framings
+pf_dn_emm <- c(0,0,0,0,0,0,1,rep(0,8))
+pf_conv_emm <- c(rep(0,7),1,(rep(0,7)))
+pf_sn_emm <- c(rep(0,8),1,(rep(0,6)))
+pf_mn_emm <- c(rep(0,9),1,(rep(0,5)))
+
+sf_cn_emm <- c(rep(0,10),1,(rep(0,4))) ## self-enhancing framings
+sf_dn_emm <- c(rep(0,11),1,(rep(0,3)))
+sf_conv_emm <- c(rep(0,12),1,(rep(0,2)))
+sf_sn_emm <- c(rep(0,13),1,0)
+sf_mn_emm <- c(rep(0,14),1)
+
+RQ2 <- contrast(cell_emmeans, 
+                          method = list("Pro-env Frame + Control vs Control" = pf_cn_emm - cf_cn_emm,
+                                        "Pro-env Frame + DN vs Control" = pf_dn_emm - cf_cn_emm,
+                                        "Pro-env Frame + Conv vs Control" = pf_conv_emm - cf_cn_emm,
+                                        "Pro-env Frame + SN vs Control" = pf_sn_emm - cf_cn_emm,
+                                        "Pro-env Frame + MN vs Control" = pf_mn_emm - cf_cn_emm,
+                                        "Self-enh Frame + Control vs Control" = sf_cn_emm - cf_cn_emm,
+                                        "Self-enh Frame + DN vs Control" = sf_dn_emm - cf_cn_emm,
+                                        "Self-enh Frame + Conv vs Control" = sf_conv_emm - cf_cn_emm,
+                                        "Self-enh Frame + SN vs Control" = sf_sn_emm - cf_cn_emm,
+                                        "Self-enh Frame + MN vs Control" = sf_mn_emm - cf_cn_emm), adjust = "sidak")
+
+RQ2 %>%
+  knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+RQ2 %>% confint() %>%
   knitr::kable(digits = 2)
+
+# effect sizes
+eff_size(cell_emmeans, method = list("Pro-env Frame + Control vs Control" = pf_cn_emm - cf_cn_emm,
+                                        "Pro-env Frame + DN vs Control" = pf_dn_emm - cf_cn_emm,
+                                        "Pro-env Frame + Conv vs Control" = pf_conv_emm - cf_cn_emm,
+                                        "Pro-env Frame + SN vs Control" = pf_sn_emm - cf_cn_emm,
+                                        "Pro-env Frame + MN vs Control" = pf_mn_emm - cf_cn_emm,
+                                        "Self-enh Frame + Control vs Control" = sf_cn_emm - cf_cn_emm,
+                                        "Self-enh Frame + DN vs Control" = sf_dn_emm - cf_cn_emm,
+                                        "Self-enh Frame + Conv vs Control" = sf_conv_emm - cf_cn_emm,
+                                        "Self-enh Frame + SN vs Control" = sf_sn_emm - cf_cn_emm,
+                                        "Self-enh Frame + MN vs Control" = sf_mn_emm - cf_cn_emm), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
 ```
 
-Exploratory finding:
 
-* In the control framing condition, consumer intentions were close to being significantly higher in the convention norm condition (M = 4.51) compared to the social norm condition (M = 4.17), Mdiff = 0.34, t(1039) = 1.91, p = .056
+```{r}
+emmip(mod_mice, framing_condition ~ norm_condition, CIs = FALSE, xlab = "Norm Condition", ylab = "Consumer Intentions")
+```
 
 
+```{r}
+emmip(mod_mice, framing_condition ~ norm_condition, CIs = FALSE, xlab = "Norm Condition", ylab = "Consumer Intentions")
+```
+
+
+
+
+
+
+# Exploratory Analyses
+
+## Effect of framings across norm conditions 
 
 Comparing consumer intentions for each norm condition between each framing condition:
 ```{r}
@@ -1871,7 +1774,7 @@ control_norm_means$emmeans %>%
   knitr::kable(digits = 2)
 
 control_norm_means$contrasts %>%
-  knitr::kable(digits = 3)
+  knitr::kable(digits = c(NA,2,2,2,2,3))
 
 eff_size(control_norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
   knitr::kable(digits = 2)
@@ -1889,7 +1792,7 @@ descr_norm_means$emmeans %>%
   knitr::kable(digits = 2)
 
 descr_norm_means$contrasts %>%
-  knitr::kable(digits = 3)
+  knitr::kable(digits = c(NA,2,2,2,2,3))
 
 eff_size(descr_norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
   knitr::kable(digits = 2)
@@ -1907,7 +1810,7 @@ conv_norm_means$emmeans %>%
   knitr::kable(digits = 2)
 
 conv_norm_means$contrasts %>%
-  knitr::kable(digits = 3)
+  knitr::kable(digits = c(NA,2,2,2,2,3))
 
 eff_size(conv_norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
   knitr::kable(digits = 2)
@@ -1925,7 +1828,7 @@ soc_norm_means$emmeans %>%
   knitr::kable(digits = 2)
 
 soc_norm_means$contrasts %>%
-  knitr::kable(digits = 3)
+  knitr::kable(digits = c(NA,2,2,2,2,3))
 
 eff_size(soc_norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
   knitr::kable(digits = 2)
@@ -1943,7 +1846,7 @@ moral_norm_means$emmeans %>%
   knitr::kable(digits = 2)
 
 moral_norm_means$contrasts %>%
-  knitr::kable(digits = 3)
+  knitr::kable(digits = c(NA,2,2,2,2,3))
 
 eff_size(moral_norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
   knitr::kable(digits = 2)
@@ -1951,646 +1854,148 @@ eff_size(moral_norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
 
 
 
-### Values Interactions
-
->>H4: There will be a three-way interaction between values (biospheric, egoistic, altruistic, hedonic), framing condition, & norm condition such that when a pro-environmental or control framing is used, values will moderate the effect of each norm condition, but not when a self-enhancing framing is used.
-
-
-### Biospheric Values
-
-First, relationship between biospheric values & consumer intentions for each norm condition:
-```{r}
-bio_norm_means <- emtrends(mod_mice, ~norm_condition, var = "biospheric_center", adjust = "none")
-
-bio_norm_means %>%
-  knitr::kable(digits = 2)
-
-bio_norm_contr <- contrast(bio_norm_means, "pairwise")
-
-bio_norm_contr %>%
-  knitr::kable(digits = 3)
-```
-
-Confidence interval
-```{r}
-confint(bio_norm_contr) %>%
-  knitr::kable(digits = 2)
-```
-
-
-```{r}
-# On a single graph
-describe(average_df$biospheric_center)
-at_list <- list(biospheric_center = seq(-4.9, 1.2, by = 1)) # add .05 to the bounds set by min and max
-
-# without data overlaid
-emmip(mod_mice, norm_condition ~ biospheric_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Biospheric Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"),
-        labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa() + text_settings
-
-
-# with data overlaid
-emmip(mod_mice, ~ biospheric_center | norm_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Biospheric Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + geom_point(data = average_df, aes(x = biospheric_center, y = consumer_intentions, color = norm_condition), alpha = 0.5) + facet_wrap(~norm_condition, labeller = labeller(norm_condition = norm_labs)) + theme_apa() + text_settings
-```
-
-* Biospheric values was a significant, positive predictor of consumer intentions in all norm conditions except for the moral norm conditions in which it was a non-significant, positive predictor.
-
-
-
-Is the slope of the relationship between biospheric values & consumer intentions stronger in any one of the norm conditions compared to the others?
-
-```{r}
-bio_norm_slopes <- emtrends(mod_mice, pairwise~norm_condition, var = "biospheric_center", adjust = "none")
-
-bio_norm_slopes$emtrends %>%
-  knitr::kable(digits = 2)
-
-bio_norm_slopes$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-Confidence interval
-```{r}
-confint(bio_norm_slopes$contrasts) %>%
-  knitr::kable(digits = 2)
-```
-
-The relationship between biospheric values and consumer intentions was significantly stronger in the convention norm condition (b = 0.61) compared to the moral norm condition (b = 0.20), t(1039) = -2.69, p = .007, and in the convention norm condition compared to the social norm condition (b = 0.26), t(1039) = 2.49, p = .013, and in the convention norm condition compared to the descriptive norm condition (b = 0.32), t(1039) = -1.98, p = .048.
-
-
-
-Second, relationship between biospheric values & consumer intentions for each framing condition:
-```{r}
-bio_frame_slopes <- emtrends(mod_mice, ~framing_condition, var = "biospheric_center", adjust = "none")
-
-bio_frame_slopes %>% 
-  knitr::kable(digits = 2)
-```
-
-Confidence interval
-```{r}
-confint(bio_frame_slopes) %>%
-  knitr::kable(digits = 2)
-```
-
-```{r}
-# without data overlaid
-emmip(mod_mice, framing_condition ~ biospheric_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.5, alpha = 0.6), xlab = "Biospheric Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"),
-        labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa() + text_settings
-
-# with data overlaid
-emmip(mod_mice, ~ biospheric_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Biospheric Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + geom_point(data = average_df, aes(x = biospheric_center, y = consumer_intentions, color = framing_condition), alpha = 0.5) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa() + text_settings
-```
-
-* Biospheric values were significantly, positively related to consumer intentions in all framing conditions.
-
-
-Is the slope of the relationship between biospheric values & consumer intentions stronger in any one of the framing conditions compared to the others?
-
-```{r}
-bio_frame_trends <- emtrends(mod_mice, pairwise~framing_condition, var = "biospheric_center", adjust = "none")
-
-bio_frame_trends$emtrends %>%
-  knitr::kable(digits = 2)
-
-bio_frame_trends$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-Confidence interval
-```{r}
-confint(bio_frame_trends$contrasts) %>%
-  knitr::kable(digits = 2)
-```
-
-No, the relationship between biospheric values and consumer intentions was similarly strong across all framing conditions.
-
-
-Third, interaction between biospheric values, framing, & norm condition:
-```{r}
-bio_frame_norm_trends <- emtrends(mod_mice, pairwise~norm_condition | framing_condition, var = "biospheric_center", adjust = "none")
-
-bio_frame_norm_trends$emtrends %>%
-  knitr::kable(digits = 2)
-
-bio_frame_norm_trends$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-Confidence interval
-```{r}
-confint(bio_frame_norm_trends$contrasts) %>%
-  knitr::kable(digits = 2)
-```
-
-
-```{r}
-# without data overlaid
-emmip(mod_mice, norm_condition ~ biospheric_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Biospheric Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa() + text_settings
-
-
-# with data overlaid - doesn't work
-```
-
-* In the control framing condition, biospheric values were significantly, positively related to consumer intentions in the **control norm**, **descriptive norm**, and **convention** conditions but non-significantly, negatively related in the **social norm** and **moral norm** conditions.
-
-* In the pro-environmental framing condition, biospheric values were significantly, positively related to consumer intentions in the **convention**, **social norm** and **moral norm** conditions, and non-significantly, positively related in the **control norm** and **descriptive norm** conditions.
-
-* In the self-enhancing framing condition, biospheric values were significantly, positively related to consumer intentions in the **control norm** condition, but non-significantly, positively related in all other norm conditions.
-
-
-
-### Altruistic Values
-
-
-First, relationship between altruistic values & consumer intentions for each norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition, var = "altruistic_center", adjust = "none") %>%
-  knitr::kable(digits = 2)
-```
-
-
-```{r}
-# On a single graph
-describe(average_df$altruistic_center)
-at_list <- list(altruistic_center = seq(-5.26, 0.84, by = 1))
-
-# without data overlaid
-emmip(mod_mice, norm_condition ~ altruistic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Altruistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +theme_apa() + text_settings
-
-
-# with data overlaid
-emmip(mod_mice, ~ altruistic_center | norm_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Altruistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + geom_point(data = average_df, aes(x = altruistic_center, y = consumer_intentions, color = norm_condition), alpha = 0.5) + facet_wrap(~norm_condition, labeller = labeller(norm_condition = norm_labs)) +theme_apa() + text_settings
-
-```
-
-* Altruistic values was a non-significant predictor of consumer intentions in the **control norm**, **descriptive norm**, **convention**, and **social norm** conditions.
-
-* Altruistic values was a significant, positive predictor of consumer intentions in the **moral norm** condition.
-
-
-
-Is the slope of the relationship between altruistic values & consumer intentions stronger in any one of the norm conditions compared to the others?
-
-```{r}
-alt_norm_trends <- emtrends(mod_mice, pairwise~norm_condition, var = "altruistic_center", adjust = "none")
-
-alt_norm_trends$emtrends %>%
-  knitr::kable(digits = 2)
-
-alt_norm_trends$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-Confidence interval
-```{r}
-confint(alt_norm_trends$contrasts) %>%
-  knitr::kable(digits = 2)
-```
-
-The relationship between altruistic values and consumer intentions was significantly stronger in the moral norm condition (b = 0.36) compared to the descriptive norm condition (b = -0.10), t(1039) = -2.46, p = .014.
-
-The relationship between altruistic values and consumer intentions was also significantly stronger in the moral norm condition (b = 0.36) compared to the convention norm condition (b = -0.05), t(1039) = -2.17, p = .031. 
-
-
-
-Second, relationship between altruistic values & consumer intentions for each framing condition:
-```{r}
-emtrends(mod_mice, ~framing_condition, var = "altruistic_center", adjust = "none") %>%
-  knitr::kable(digits = 2)
-```
-
-```{r}
-# without data overlaid
-emmip(mod_mice, framing_condition ~ altruistic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Altruistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +theme_apa() + text_settings
-
-# with data overlaid
-emmip(mod_mice, ~ altruistic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Altruistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + geom_point(data = average_df, aes(x = altruistic_center, y = consumer_intentions, color = framing_condition), alpha = 0.5) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +theme_apa() + text_settings
-```
-
-* Altruistic values are positively, but non-significantly, related to consumer intentions in each framing condition.
-
-
-Is the slope of the relationship between altruistic values & consumer intentions stronger in any one of the framing conditions compared to the others?
-
-```{r}
-alt_frame_trends <- emtrends(mod_mice, pairwise~framing_condition, var = "altruistic_center", adjust = "none")
-
-alt_frame_trends$emtrends %>%
-  knitr::kable(digits = 2)
-
-alt_frame_trends$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-
-Confidence interval
-```{r}
-confint(alt_frame_trends$contrasts) %>%
-  knitr::kable(digits = 2)
-```
-
-No, the difference between any two slopes was not significant.
- 
-
-
-
-Third, interaction between altruistic values, framing, & norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition | framing_condition, var = "altruistic_center", adjust = "none") %>%
-  knitr::kable(digits = 2)
-```
-
-
-```{r}
-# without data overlaid
-emmip(mod_mice, norm_condition ~ altruistic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Altruistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +theme_apa() + text_settings
-```
-
-* In the control framing condition, altruistic values were not significantly related to consumer intentions in any of the norm conditions.
-
-* In the pro-environmental framing condition, altruistic values were not significantly related to consumer intentions in any of the norm conditions.
-
-* In the self-enhancing framing condition, altruistic values were significantly, positively related to consumer intentions in the **moral norm** condition, but non-significantly related in all other norm conditions.
-
-  
-
-
-
-
-### Egoistic Values
-
-First, relationship between egoistic values & consumer intentions for each norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition, var = "egoistic_center", adjust = "none") %>%
-  knitr::kable(digits = 2)
-```
-
-
-```{r}
-# On a single graph
-describe(average_df$egoistic_center)
-at_list <- list(egoistic_center = seq(-3.45, 2.05, by = 1))
-
-# without data overlaid
-emmip(mod_mice, norm_condition ~ egoistic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Egoistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +theme_apa() + text_settings
-
-
-# with data overlaid
-emmip(mod_mice, ~ egoistic_center | norm_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Egoistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + geom_point(data = average_df, aes(x = egoistic_center, y = consumer_intentions, color = norm_condition), alpha = 0.5) + facet_wrap(~norm_condition, labeller = labeller(norm_condition = norm_labs)) +theme_apa() + text_settings
-```
-
-* Egoistic values were a significant, negative predictor of consumer intentions within each norm condition
-
-
-Is the slope of the relationship between egoistic values & consumer intentions stronger in any one of the norm conditions compared to the others?
-
-```{r}
-ego_norm_trends <- emtrends(mod_mice, pairwise~norm_condition, var = "egoistic_center", adjust = "none")
-
-ego_norm_trends$emtrends %>%
-  knitr::kable(digits = 2)
-
-ego_norm_trends$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-
-Confidence interval
-```{r}
-confint(ego_norm_trends$contrasts) %>%
-  knitr::kable(digits = 2)
-```
-
-No, the difference between any two slopes was not significant.
-
-
-
-Second, relationship between egoistic values & consumer intentions for each framing condition:
-```{r}
-emtrends(mod_mice, ~framing_condition, var = "egoistic_center", adjust = "none") %>%
-  knitr::kable(digits = 2)
-```
-
-
-```{r}
-# without data overlaid
-emmip(mod_mice, framing_condition ~ egoistic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Egoistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +theme_apa() + text_settings
-
-# with data overlaid
-emmip(mod_mice, ~ egoistic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Egoistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + geom_point(data = average_df, aes(x = egoistic_center, y = consumer_intentions, color = framing_condition), alpha = 0.5) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +theme_apa() + text_settings
-```
-
-* Egoistic values were a significant, negative predictor of consumer intentions within each framing condition
-
-
-Is the slope of the relationship between egoistic values & consumer intentions stronger in any one of the framing conditions compared to the others?
-
-```{r}
-ego_frame_trends <- emtrends(mod_mice, pairwise~framing_condition, var = "egoistic_center", adjust = "none")
-
-ego_frame_trends$emtrends %>%
-  knitr::kable(digits = 2)
-
-ego_frame_trends$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-
-Confidence interval
-```{r}
-confint(ego_frame_trends$contrasts) %>%
-  knitr::kable(digits = 2)
-```
-
-No, the difference between any two slopes was not significant.
-
-
-
-
-Third, interaction between egoistic values, framing, & norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition | framing_condition, var = "egoistic_center", adjust = "none") %>%
-  knitr::kable(digits = 2)
-```
-
-
-```{r}
-# without data overlaid
-emmip(mod_mice, norm_condition ~ egoistic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Egoistic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +theme_apa() + text_settings
-```
-
-* In the control framing condition, egoistic values were *not* significantly related to consumer intentions in the **control norm**, **descriptive norm**, or **moral norm** conditions (but were signifcantly, negatively related to consumer intentions in the **convention** and **social norm** conditions).
-
-* In the pro-environmental framing condition, egoistic values were *not* significantly related to consumer intentions in the **descriptive norm**, **convention**, or **social norm** conditions (but were significantly, negatively related in the **control norm** and **moral norm** conditions).
-
-* In the self-enhancing framing condition, egoistic values were *not* significantly related to consumer intentions in the **descriptive norm** and **social norm** conditions (but were significantly, negatively related in the **control norm**, **convention** & **moral norm** conditions).
-
-
-
-
-
-### Hedonic Values
-
-First, relationship between hedonic values & consumer intentions for each norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition, var = "hedonic_center", adjust = "none") %>%
-  knitr::kable(digits = 2)
-```
-
-
-```{r}
-# On a single graph
-describe(average_df$hedonic_center)
-at_list <- list(hedonic_center = seq(-5.1, 1, by = 1))
-
-# without data overlaid
-emmip(mod_mice, norm_condition ~ hedonic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Hedonic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +theme_apa() + text_settings
-
-
-# with data overlaid
-emmip(mod_mice, ~ hedonic_center | norm_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Hedonic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + geom_point(data = average_df, aes(x = hedonic_center, y = consumer_intentions, color = norm_condition), alpha = 0.5) + facet_wrap(~norm_condition, labeller = labeller(norm_condition = norm_labs)) +theme_apa() + text_settings
-```
-
-* Hedonic values were not significantly related to consumer intentions in any norm condition except for the **moral norm** condition in which they were significantly, negatively related to consumer intentions.
-
-
-Is the slope of the relationship between hedonic values & consumer intentions stronger in any one of the norm conditions compared to the others?
-
-```{r}
-hed_norm_trends <- emtrends(mod_mice, pairwise~norm_condition, var = "hedonic_center", adjust = "none")
-
-hed_norm_trends$emtrends %>%
-  knitr::kable(digits = 2)
-
-hed_norm_trends$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-
-Confidence interval
-```{r}
-confint(hed_norm_trends$contrasts) %>%
-  knitr::kable(digits = 2)
-```
-
-There was a significant difference in the relationship between hedonic values and consumer intentions between the convention norm condition (b = 0.12) and the moral norm condition (b = -0.30), t(1039) = 2.66, p = .008.
-
-
-
-Second, relationship between hedonic values & consumer intentions for each framing condition:
-```{r}
-emtrends(mod_mice, ~framing_condition, var = "hedonic_center", adjust = "none") %>%
-  knitr::kable(digits = 2)
-```
-
-```{r}
-# without data overlaid
-emmip(mod_mice, framing_condition ~ hedonic_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Hedonic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +theme_apa() + text_settings
-
-# with data overlaid
-emmip(mod_mice, ~ hedonic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Hedonic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + geom_point(data = average_df, aes(x = hedonic_center, y = consumer_intentions, color = framing_condition), alpha = 0.5) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +theme_apa() + text_settings
-```
-
-* Hedonic values were non-significantly, negatively related to consumer intentions in all framing conditions.
-
-
-Is the slope of the relationship between hedonic values & consumer intentions stronger in any one of the framing conditions compared to the others?
-
-```{r}
-hed_frame_trends <- emtrends(mod_mice, pairwise~framing_condition, var = "hedonic_center", adjust = "none")
-
-hed_frame_trends$emtrends %>%
-  knitr::kable(digits = 2)
-
-hed_frame_trends$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-
-Confidence interval
-```{r}
-confint(hed_frame_trends$contrasts) %>%
-  knitr::kable(digits = 2)
-```
-
-No, there was no significant difference between any two pairs of slopes.
-
-
-
-Third, interaction between hedonic values, framing, & norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition | framing_condition, var = "hedonic_center", adjust = "none") %>% 
-  knitr::kable(digits = 2)
-```
-
-```{r}
-# without data overlaid
-emmip(mod_mice, norm_condition ~ hedonic_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Hedonic Values (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +theme_apa() + text_settings
-```
-
-* In the control framing condition, hedonic values were not significantly related to consumer intentions in any norm condition.
-
-* In the pro-environmental framing condition, hedonic values were not significantly related to consumer intentions in any norm condition.
-
-* In the self-enhancing framing condition, hedonic values were not significantly related to consumer intentions in any norm condition except for the **moral norm** condition in which they were significantly, related.
-
-
-
-
-### Ingroup Identification Interactions
-
->>H5: There will be a two-way interaction between ingroup identification and norm condition.
-
-First, relationship between ingroup identification & consumer intentions for each norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition, var = "ingroup_center", adjust = "none") %>%
-  knitr::kable(digits = 2)
-```
-
-
-```{r}
-# On a single graph
-describe(average_df$ingroup_center)
-at_list <- list(ingroup_center = seq(-3.69, 2.41, by = 1))
-
-# without data overlaid
-emmip(mod_mice, norm_condition ~ ingroup_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Ingroup Identification (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +theme_apa() + text_settings
-
-
-# with data overlaid
-emmip(mod_mice, ~ ingroup_center | norm_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Ingroup Identification (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + geom_point(data = average_df, aes(x = ingroup_center, y = consumer_intentions, color = norm_condition), alpha = 0.5) + facet_wrap(~norm_condition, labeller = labeller(norm_condition = norm_labs)) +theme_apa() + text_settings
-```
-
-* Ingroup identification was not significantly related to consumer intentions in any of the norm conditions.
-
-
-Is the slope of the relationship between ingroup idenitification & consumer intentions stronger in any one of the norm conditions compared to the others?
-
-```{r}
-ing_norm_trends <- emtrends(mod_mice, pairwise~norm_condition, var = "ingroup_center", adjust = "none")
-
-ing_norm_trends$emtrends %>%
-  knitr::kable(digits = 2)
-
-ing_norm_trends$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-
-Confidence interval
-```{r}
-confint(ing_norm_trends$contrasts) %>%
-  knitr::kable(digits = 2)
-```
-
-No, there was no significant difference between any two pairs of slopes.
-
-
-
-Second, relationship between ingroup idenitification & consumer intentions for each framing condition:
-```{r}
-emtrends(mod_mice, ~framing_condition, var = "ingroup_center", adjust = "none") %>%
-  knitr::kable(digits = 2)
-```
-
-
-```{r}
-# without data overlaid
-emmip(mod_mice, framing_condition ~ ingroup_center, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Ingroup Identification (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +theme_apa() + text_settings
-
-# with data overlaid
-emmip(mod_mice, ~ ingroup_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 0.8, alpha = 0.5), xlab = "Ingroup Identification (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + geom_point(data = average_df, aes(x = ingroup_center, y = consumer_intentions, color = framing_condition), alpha = 0.5) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +theme_apa() + text_settings
-```
-
-* Ingroup identification was non-significantly related to consumer intentions in all framing conditions.
-
-
-Is the slope of the relationship between ingroup identification & consumer intentions stronger in any one of the framing conditions compared to the others?
-
-```{r}
-ing_frame_trends <- emtrends(mod_mice, pairwise~framing_condition, var = "ingroup_center", adjust = "none")
-
-ing_frame_trends$emtrends %>%
-  knitr::kable(digits = 2)
-
-ing_frame_trends$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-
-Confidence interval
-```{r}
-confint(ing_frame_trends$contrasts) %>%
-  knitr::kable(digits = 2)
-```
-
-No, there was no significant difference between any two pairs of slopes.
-
-
-
->> Exploratory RQ1: Is there a three-way interaction between ingroup identification, framing, and norm condition?
-
-Third, interaction between ingroup identification, framing, & norm condition:
-```{r}
-emtrends(mod_mice, ~norm_condition | framing_condition, var = "ingroup_center", adjust = "none") %>%
-  knitr::kable(digits = 2)
-```
-
-
-```{r}
-# without data overlaid
-emmip(mod_mice, norm_condition ~ ingroup_center | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1.2, alpha = 0.8), xlab = "Ingroup Identification (Centered)", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +theme_apa() + text_settings
-```
-
-* In the control framing condition, ingroup identification was non-significantly related to consumer intentions in all norm conditions.
-
-* In the pro-environmental framing condition, ingroup identification was non-significantly related to consumer intentions in all norm conditions.
-
-* In the self-enhancing framing condition, ingroup identification was non-significantly related to consumer intentions in all norm conditions.
-
-
-### All cells compared to control
-
->> Exploratory RQ2: Which combination of framing and norm condition produced the strongest reductions in consumer intentions compared to the control condition?
-
-```{r}
-cell_int_means <- emmeans(mod_mice, pairwise ~ norm_condition*framing_condition, adjust = "none")
-
-cell_int_means$emmeans %>%
-  knitr::kable(digits = 2)
-
-cell_int_means$contrasts %>%
-  knitr::kable(digits = 3)
-```
-
-
-```{r}
-emmip(mod_mice, framing_condition ~ norm_condition, CIs = FALSE, xlab = "Norm Condition", ylab = "Consumer Intentions")
-```
-
-There are no significant differences between the control norm/control framing condition and any of the other combinations of framing/norm conditions.
-
-
-
-### Gender Interactions (exploratory)
-
+## Gender Interactions 
 
 Gender X Norm
 ```{r}
 emmeans(mod_mice, ~ norm_condition*Gender*framing_condition, adjust = "none")
 
-emmip(mod_mice, norm_condition ~ Gender, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +theme_apa() + text_settings
+emmip(mod_mice, norm_condition ~ Gender, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +theme_apa() + text_settings
 ```
 
 Gender X Framing
 ```{r}
-emmip(mod_mice, framing_condition ~ Gender, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +theme_apa() + text_settings
+emmip(mod_mice, framing_condition ~ Gender, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +theme_apa() + text_settings
 ```
 
 Gender X Norm X Framing
 ```{r}
-emmip(mod_mice, norm_condition ~ Gender | framing_condition, at = at_list, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +theme_apa() + text_settings
+emmip(mod_mice, norm_condition ~ Gender | framing_condition, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +theme_apa() + text_settings
 ```
 
 
+
+# Post-hoc Power Analysis 
+
+- Using final sample size (n = 1133) and a small effect size
+
+from Cohen (1988):
+
+f2 = R^2/(1 - R^2)
+R2 = f^2/(1 + f^2)
+
+Small: f2 = .02, Small: R2 = .02
+
+
+Model A (full model): PA = 95
+Denominator df: n-PA = 1133-95 = 1038
+
+Effects where numerator df: PA-PC = 4
+
+  * Main effect of norm
+  * Values X norm interactions
+  * Ingroup x norm interactions
+```{r}
+# If effect size were small and df_resid = 1038
+pwr.f2.test(u = 4, # Numerator df (PA-PC) 
+            v = 1038, # Denominator df (n - PA)
+            f2 = .02, 
+            sig.level = .05,
+            power = NULL) # power = .97
+```
+
+
+Effects where numerator df: PA-PC = 2
+
+  * Main effect of framing
+  * Values X framing interactions
+  * Ingroup x framing interactions
+```{r}
+# If effect size were small and df_resid = 1038
+pwr.f2.test(u = 2, # Numerator df (PA-PC) 
+            v = 1038, # Denominator df (n - PA)
+            f2 = .02, 
+            sig.level = .05,
+            power = NULL) # power = .99
+```
+
+
+Effects where numerator df: PA-PC = 8
+
+  * Norm x Framing interaction
+  * Values X framing x norm interactions
+  * Ingroup x framing x norm interactions
+```{r}
+# If effect size were small and df_resid = 1038
+pwr.f2.test(u = 8, # Numerator df (PA-PC) 
+            v = 1038, # Denominator df (n - PA)
+            f2 = .02, 
+            sig.level = .05,
+            power = NULL) # power = .93
+```
+
+
+Effects where numerator df: PA-PC = 1
+
+  * Biospheric values
+  * Altruistic values
+  * Egoistic values
+  * Hedonic values
+  * Ingroup identification
+  * Self-deceptive enhancement
+  * Impression management
+  * Clothing interest
+  * Age
+  * Gender
+
+```{r}
+# If effect size were small and df_resid = 1038
+pwr.f2.test(u = 1, # Numerator df (PA-PC) 
+            v = 1038, # Denominator df (n - PA)
+            f2 = .02, 
+            sig.level = .05,
+            power = NULL) # power = .995
+```
+
+
+Checking p-values from Pooled ANOVA table
+```{r}
+# p-value for biospheric values
+pf(60.76, df1 = 1, df2 = 182541.21, lower.tail = FALSE)
+
+# p-value for framing condition
+pf(1.94, df1 = 2, df2 = 277911.15, lower.tail = FALSE)
+```
+
+Q: Which of the pooled ANOVA effects would be significant if the non-adjusted denominator df, 1038, were used?
+
+df1 = 1:
+
+* F-critical value when df1 = 1 & df2 = 1038: Fcv = 3.8504
+
+* F-critical value when df1 = 1 & df2 = 9999: Fcv = 3.8424
+
+
+
+df1 = 2:
+
+* F-critical value when df1 = 2 & df2 = 1038: Fcv = 3.0044
+
+* F-critical value when df1 = 2 & df2 = 9999: Fcv = 2.9966
+
+
+
+df1 = 4:
+
+* F-critical value when df1 = 4 & df2 = 1038: Fcv = 2.3805
+
+* F-critical value when df1 = 4 & df2 = 9999: Fcv = 2.3728
+
+
+
+df1 = 8:
+
+* F-critical value when df1 = 8 & df2 = 1038: Fcv = 1.9473
+
+* F-critical value when df1 = 8 & df2 = 9999: Fcv = 1.9393
 
