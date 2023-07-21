@@ -1088,6 +1088,8 @@ data_R_alt %>%
 ```
 
 
+
+
 Descriptives for variables with NO missing data
 
 Variables with NO missing data:
@@ -1205,6 +1207,16 @@ hist(imp5_data$altruistic, main = "Histogram of Altruistic Values", xlab = "Altr
 hist(imp5_data$egoistic, main = "Histogram of Egoistic Values", xlab = "Egoistic Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
 
 hist(imp5_data$hedonic, main = "Histogram of Hedonic Values", xlab = "Hedonic Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+par(mfrow = c(2,2))
+
+hist(data_R_alt$clothing_interest, main = "Histogram of Clothing Interest", xlab = "Clothing Interest", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2) # histogram
+
+hist(data_R_alt$ingroup_identification, main = "Histogram of In-group Identification", xlab = "In-group Identification", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+hist(data_R_alt$consumer_intentions, main = "Histogram of Consumer Intentions", xlab = "Consumer Intentions", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
+
+hist(data_R_alt$Age, main = "Histogram of Age", xlab = "Age", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
 
 ```
 

@@ -76,15 +76,7 @@ pre_spring23 <- import("data/prescreen/dittersdorf_matches_s23.csv")
 participant_list <- import("data/prescreen/dittersdorf_participants.csv")
 ```
 
-
-```{r inspect raw data, results = 'hide', include = FALSE}
-# Main Data
-str(raw_psych_hum_subj, list.len = ncol(raw_psych_hum_subj))
-str(raw_mktg_hum_subj, list.len = ncol(raw_mktg_hum_subj))
-str(raw_gen_uo_pop, list.len = ncol(raw_gen_uo_pop))
-```
-
-## Fix age before converting variable types
+Fix age before converting variable types
 ```{r}
 table(raw_psych_hum_subj$Age) # 18 years old = 18
 table(raw_mktg_hum_subj$Age) # 1999 = 24
@@ -95,6 +87,13 @@ raw_mktg_hum_subj$Age[raw_mktg_hum_subj$Age == 1999] <- 24
 
 table(raw_psych_hum_subj$Age) # 18 years old = 18
 table(raw_mktg_hum_subj$Age) # 1999 = 24
+```
+
+```{r inspect raw data, results = 'hide', include = FALSE}
+# Main Data
+str(raw_psych_hum_subj, list.len = ncol(raw_psych_hum_subj))
+str(raw_mktg_hum_subj, list.len = ncol(raw_mktg_hum_subj))
+str(raw_gen_uo_pop, list.len = ncol(raw_gen_uo_pop))
 ```
 
 
@@ -498,6 +497,14 @@ Age
 data %>%
   dplyr::select(Age) %>%
   hist()
+
+data %>% dplyr::select(Age) %>%
+  describe()
+
+tab1(data$Age)
+
+IQR(data$Age, na.rm = TRUE, type = 1)
+quantile(data$Age, c(.25,.75), type = 1, na.rm = TRUE)
 ```
 
 Income
@@ -557,11 +564,66 @@ Gender
 ```{r label gender levels}
 levels(data$Gender) <- c("Woman", "Man", "Non-binary", "I prefer not to identify", "Other")
 
-table(data$Gender) 
+table(data$Gender)
+sort(table(data$Gender)/1133)*100
 
 data %>%
   filter(Gender == 5) %>%
   dplyr::select(Gender_5_TEXT)
+```
+
+
+Ethnicity
+
+- 1 = American Indian or Alaska Native
+- 2 = Asian
+- 3 = Black or African American
+- 4 = Hispanic or Latino
+- 5 = Pacific Islander
+- 6 = White
+- 7 = Mixed Ethnicity
+- 8 = Other
+```{r ethnicity}
+data$Ethnicity <- as.factor(data$Ethnicity)
+levels(data$Ethnicity) 
+
+table(data$Ethnicity) 
+sort(table(data$Ethnicity)/1133)*100
+
+data %>%
+  filter(Gender == 5) %>%
+  dplyr::select(Gender_5_TEXT)
+```
+
+
+Parents Education
+- 1 = Middle school or some high school
+- 2 = High school or GED
+- 3 = Some college
+- 4 = College degree
+- 5 = Master's degree
+- 6 = Doctorate
+```{r}
+table(data$Parents_Education) # n = 1131
+
+sort(table(data$Parents_Education)/1131)*100
+```
+
+
+Political Orientation
+1 = Very liberal
+2 = Somewhat liberal
+3 = Slightly liberal
+4 = Neither liberal nor conservative
+5 = Slightly conservative
+6 = Somewhat conservative
+7 = Very conservative
+8 = Other
+
+```{r}
+table(data$Pol_Ornt) # n = 1133
+
+sort(table(data$Pol_Ornt)/1133)*100
 ```
 
 
@@ -634,8 +696,9 @@ test_of_mcar <- data %>%
   dplyr::select(consumer_intentions_1:consumer_behaviors, clothing_interest_1:clothing_interest_20, ingroup_ident_1:ingroup_ident_14, values_1:values_16, socially_desirable_1:socially_desirable_16, Age, Gender, Income, big_2_1:big_2_65) %>%
   mcar_test()
 
-test_of_mcar$statistic
-test_of_mcar$df # Critical values are 8565.53 and 9086.26
+test_of_mcar$statistic # chi-square = 8873.65
+test_of_mcar$df # chi-square CV = 27720.73
+qchisq(p = .05, df = 27335, lower.tail = FALSE)
 test_of_mcar$p.value
 ```
 
@@ -1056,6 +1119,292 @@ data_R$norm_condition <- ordered(data_R$norm_condition, levels = c("control_norm
 ```
 
 
+### MCAR Test
+
+
+Missingness on aggregated variables
+```{r}
+data_R %>%
+  dplyr::select(Age, Gender, consumer_behaviors, self_deceptive_sdr, impress_manag_sdr, biospheric, egoistic, altruistic, hedonic, clothing_interest, ingroup_identification, framing_condition, norm_condition, consumer_intentions) %>%
+  vis_miss()
+
+sum(is.na(data_R$Gender))
+```
+
+
+A non-significant test suggests the data *is* missing completely at random.
+```{r MCAR test with aggregate variables}
+test_of_mcar2 <- data_R %>%
+  dplyr::select(Age, Gender, consumer_behaviors, self_deceptive_sdr, impress_manag_sdr, biospheric, egoistic, altruistic, hedonic, clothing_interest, ingroup_identification, framing_condition, norm_condition, consumer_intentions) %>%
+  mcar_test()
+
+test_of_mcar2$statistic
+test_of_mcar2$df # chi-square CV = 129.918
+qchisq(p = .05, df = 105, lower.tail = FALSE)
+test_of_mcar2$p.value
+test_of_mcar2$missing.patterns
+```
+
+
+```{r}
+data_R_missing <- data_R %>% 
+  mutate(missing_Age = ifelse(is.na(Age), 1, 0),
+         missing_cons_beh = ifelse(is.na(consumer_behaviors),1,0),
+         missing_self_dec = ifelse(is.na(self_deceptive_sdr),1,0),
+         missing_imp_man = ifelse(is.na(impress_manag_sdr),1,0),
+         missing_bio = ifelse(is.na(biospheric),1,0),
+         missing_alt = ifelse(is.na(altruistic),1,0),
+         missing_ego = ifelse(is.na(egoistic),1,0),
+         missing_hed = ifelse(is.na(hedonic),1,0))
+```
+
+
+Examining relationship between missingness and the outcome variables
+```{r}
+# Age
+miss_age_ints <- lm(consumer_intentions ~ missing_Age, data = data_R_missing)
+summary(miss_age_ints)
+
+data_R_missing %>% 
+  mutate(missing_Age = ifelse(missing_Age == 1, "Missing Scores", "Not Missing Scores")) %>% 
+  group_by(missing_Age) %>% 
+  summarize(mean_cons_ints = mean(consumer_intentions, na.rm = TRUE),
+            sd_cons_ints = sd(consumer_intentions, na.rm = TRUE))
+
+miss_age_behs <- glm(consumer_behaviors ~ missing_Age, data = data_R_missing, family = "binomial")
+summary(miss_age_behs)
+
+data_R_missing %>% 
+  group_by(missing_Age) %>% 
+  dplyr::select(consumer_behaviors) %>%
+  table()
+
+## Missingness on age not significantly related to consumer intentions, b = .13, t(1131) = 1.06, p = .288, or consumer behaviors, z = 1.21, p = .226
+
+
+
+# Self-deceptive enhancement
+miss_sde_ints <- lm(consumer_intentions ~ missing_self_dec, data = data_R_missing)
+summary(miss_sde_ints)
+
+data_R_missing %>% 
+  mutate(missing_self_dec = ifelse(missing_self_dec == 1, "Missing Scores", "Not Missing Scores")) %>% 
+  group_by(missing_self_dec) %>% 
+  summarize(mean_cons_ints = mean(consumer_intentions, na.rm = TRUE),
+            sd_cons_ints = sd(consumer_intentions, na.rm = TRUE))
+
+miss_sde_behs <- glm(consumer_behaviors ~ missing_self_dec, data = data_R_missing, family = "binomial")
+summary(miss_sde_behs)
+
+data_R_missing %>% 
+  group_by(missing_self_dec) %>% 
+  dplyr::select(consumer_behaviors) %>%
+  table()
+
+## Missingness on self-deceptive enhancement not significantly related to consumer intentions, b = .41, t(1131) = 1.33, p = .185, or to consumer behaviors, z = .25, p = .805
+
+
+# Impression management
+miss_im_ints <- lm(consumer_intentions ~ missing_imp_man, data = data_R_missing)
+summary(miss_im_ints)
+
+data_R_missing %>% 
+  mutate(missing_imp_man = ifelse(missing_imp_man == 1, "Missing Scores", "Not Missing Scores")) %>% 
+  group_by(missing_imp_man) %>% 
+  summarize(mean_cons_ints = mean(consumer_intentions, na.rm = TRUE),
+            sd_cons_ints = sd(consumer_intentions, na.rm = TRUE))
+
+miss_im_behs <- glm(consumer_behaviors ~ missing_imp_man, data = data_R_missing, family = "binomial")
+summary(miss_im_behs)
+
+data_R_missing %>% 
+  group_by(missing_imp_man) %>% 
+  dplyr::select(consumer_behaviors) %>%
+  table()
+
+## Missingness was not significantly related to consumer intentions, b = .46, t(1131) = 1.44, p = .150, or to consumer behaviors, z = .52, p = .606
+
+
+
+# Biospheric values
+miss_bio_ints <- lm(consumer_intentions ~ missing_bio, data = data_R_missing)
+summary(miss_bio_ints)
+
+data_R_missing %>% 
+  mutate(missing_bio = ifelse(missing_bio == 1, "Missing Scores", "Not Missing Scores")) %>% 
+  group_by(missing_bio) %>% 
+  summarize(mean_cons_ints = mean(consumer_intentions, na.rm = TRUE),
+            sd_cons_ints = sd(consumer_intentions, na.rm = TRUE))
+
+miss_bio_behs <- glm(consumer_behaviors ~ missing_bio, data = data_R_missing, family = "binomial")
+summary(miss_bio_behs)
+
+data_R_missing %>% 
+  group_by(missing_bio) %>% 
+  dplyr::select(consumer_behaviors) %>%
+  table()
+
+## Missingness was not significantly related to consumer intentions, b = .17, t(1131) = .51, p = .611, or to consumer behaviors, z = -.04, p = .967
+
+
+
+# Altruistic values
+miss_alt_ints <- lm(consumer_intentions ~ missing_alt, data = data_R_missing)
+summary(miss_alt_ints)
+
+data_R_missing %>% 
+  mutate(missing_alt = ifelse(missing_alt == 1, "Missing Scores", "Not Missing Scores")) %>% 
+  group_by(missing_alt) %>% 
+  summarize(mean_cons_ints = mean(consumer_intentions, na.rm = TRUE),
+            sd_cons_ints = sd(consumer_intentions, na.rm = TRUE))
+
+miss_alt_behs <- glm(consumer_behaviors ~ missing_alt, data = data_R_missing, family = "binomial")
+summary(miss_alt_behs)
+
+data_R_missing %>% 
+  group_by(missing_alt) %>% 
+  dplyr::select(consumer_behaviors) %>%
+  table()
+
+## Missingness was not significantly related to consumer intentions, b = .20, t(1131) = .60, p = .549, or to consumer behaviors, p = .819
+
+
+
+# Egoistic values
+miss_ego_ints <- lm(consumer_intentions ~ missing_ego, data = data_R_missing)
+summary(miss_ego_ints)
+
+data_R_missing %>% 
+  mutate(missing_ego = ifelse(missing_ego == 1, "Missing Scores", "Not Missing Scores")) %>% 
+  group_by(missing_ego) %>% 
+  summarize(mean_cons_ints = mean(consumer_intentions, na.rm = TRUE),
+            sd_cons_ints = sd(consumer_intentions, na.rm = TRUE))
+
+miss_ego_behs <- glm(consumer_behaviors ~ missing_ego, data = data_R_missing, family = "binomial")
+summary(miss_ego_behs)
+
+data_R_missing %>% 
+  group_by(missing_ego) %>% 
+  dplyr::select(consumer_behaviors) %>%
+  table()
+
+## Missingness was not significantly related to consumer intentions, p = .702, or to consumer behaviors, p = .967
+
+
+
+# Hedonic values
+miss_hed_ints <- lm(consumer_intentions ~ missing_hed, data = data_R_missing)
+summary(miss_hed_ints)
+
+data_R_missing %>% 
+  mutate(missing_hed = ifelse(missing_hed == 1, "Missing Scores", "Not Missing Scores")) %>% 
+  group_by(missing_hed) %>% 
+  summarize(mean_cons_ints = mean(consumer_intentions, na.rm = TRUE),
+            sd_cons_ints = sd(consumer_intentions, na.rm = TRUE))
+
+miss_hed_behs <- glm(consumer_behaviors ~ missing_hed, data = data_R_missing, family = "binomial")
+summary(miss_hed_behs)
+
+data_R_missing %>% 
+  group_by(missing_ego) %>% 
+  dplyr::select(consumer_behaviors) %>%
+  table()
+
+## Missingness was not significantly related to consumer intentions, p = .482, or to consumer behaviors, p = .819
+```
+
+
+
+Examine relationship between missingness and framing & norm condition
+
+data_R_missing <- data_R %>% 
+  mutate(missing_Age = ifelse(is.na(Age), 1, 0),
+         missing_cons_beh = ifelse(is.na(consumer_behaviors),1,0),
+         missing_self_dec = ifelse(is.na(self_deceptive_sdr),1,0),
+         missing_imp_man = ifelse(is.na(impress_manag_sdr),1,0),
+         missing_bio = ifelse(is.na(biospheric),1,0),
+         missing_alt = ifelse(is.na(altruistic),1,0),
+         missing_ego = ifelse(is.na(egoistic),1,0),
+         missing_hed = ifelse(is.na(hedonic),1,0))
+```{r}
+# Age
+data_R_missing %>% 
+  group_by(missing_Age) %>% 
+  dplyr::select(framing_condition) %>%
+  table()
+
+data_R_missing %>% 
+  group_by(missing_Age) %>% 
+  dplyr::select(norm_condition) %>%
+  table()
+
+# Self-deceptive enhancement
+data_R_missing %>% 
+  group_by(missing_self_dec) %>% 
+  dplyr::select(framing_condition) %>%
+  table()
+
+data_R_missing %>% 
+  group_by(missing_self_dec) %>% 
+  dplyr::select(norm_condition) %>%
+  table()
+
+# Impression management
+data_R_missing %>% 
+  group_by(missing_imp_man) %>% 
+  dplyr::select(framing_condition) %>%
+  table()
+
+data_R_missing %>% 
+  group_by(missing_imp_man) %>% 
+  dplyr::select(norm_condition) %>%
+  table()
+
+# Biospheric values
+data_R_missing %>% 
+  group_by(missing_bio) %>% 
+  dplyr::select(framing_condition) %>%
+  table()
+
+data_R_missing %>% 
+  group_by(missing_bio) %>% 
+  dplyr::select(norm_condition) %>%
+  table()
+
+# Altruistic values
+data_R_missing %>% 
+  group_by(missing_alt) %>% 
+  dplyr::select(framing_condition) %>%
+  table()
+
+data_R_missing %>% 
+  group_by(missing_alt) %>% 
+  dplyr::select(norm_condition) %>%
+  table()
+
+# Egoistic values
+data_R_missing %>% 
+  group_by(missing_ego) %>% 
+  dplyr::select(framing_condition) %>%
+  table()
+
+data_R_missing %>% 
+  group_by(missing_ego) %>% 
+  dplyr::select(norm_condition) %>%
+  table()
+
+# Hedonic values
+data_R_missing %>% 
+  group_by(missing_hed) %>% 
+  dplyr::select(framing_condition) %>%
+  table()
+
+data_R_missing %>% 
+  group_by(missing_hed) %>% 
+  dplyr::select(norm_condition) %>%
+  table()
+```
+
 
 
 # Descriptive Statistics
@@ -1426,6 +1775,10 @@ Correlations between consumer intentions & all other variables:
 data_R %>%
   dplyr::select(consumer_intentions, ingroup_identification, clothing_interest, self_deceptive_sdr, impress_manag_sdr) %>%
   pairs(upper.panel = NULL)
+
+data_R %>%
+  dplyr::select(consumer_intentions, ingroup_identification, clothing_interest, self_deceptive_sdr, impress_manag_sdr) %>%
+  cor()
 
 # Consumer intentions with values
 data_R %>%

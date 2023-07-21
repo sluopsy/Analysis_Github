@@ -1546,7 +1546,7 @@ emmip(mod_mice, biospheric_center ~ norm_condition | framing_condition, CIs = TR
 Is the difference between Control Norm and Other Norm different for people low vs high on altruistic values? Does this vary across framing conditions?
 
 
-### Storing low (-1SD) and high (+1SD) altspheric values
+### Storing low (-1SD) and high (+1SD) altruistic values
 ```{r}
 sd_below <- mean(average_df$altruistic_center) - sd(average_df$altruistic_center)
 sd_above <- mean(average_df$altruistic_center) + sd(average_df$altruistic_center)
