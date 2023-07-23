@@ -1496,9 +1496,9 @@ text_settings <- theme(text = element_text(size = 20)) +
   theme(plot.title = element_text(size = 20, face = 'bold')) +
   theme(axis.title.x = element_text(face = 'bold')) +
   theme(axis.title.y = element_text(face = 'bold')) +
-  theme(axis.text.x = element_text(size = 14)) +
+  theme(axis.text.x = element_text(size = 14, 'bold')) +
   theme(axis.text.y = element_text(size = 20)) +
-  theme(axis.ticks = element_blank())
+  theme(axis.ticks = element_blank()) 
 ```
 
 #### Bio x Framing
@@ -2513,6 +2513,78 @@ emmip(mod_mice, hedonic_center ~ norm_condition | framing_condition, CIs = TRUE,
 
 
 ## Ingroup Identification
+
+## Ingroup by Norm interaction
+
+### Storing low (-1SD) and high (+1SD) ingroup identification
+```{r}
+sd_below <- mean(average_df$ingroup_center) - sd(average_df$ingroup_center)
+sd_above <- mean(average_df$ingroup_center) + sd(average_df$ingroup_center)
+```
+
+
+### Calculate EM Means at low and high bio
+```{r}
+atlist <- list(ingroup_center = c(sd_below, sd_above))
+
+combinations <- emmeans(mod_mice, ~ norm_condition*ingroup_center, at=atlist)
+
+combinations %>% knitr::kable(digits = 2)
+```
+
+
+### Custom contrasts
+```{r}
+control_low_ing <- c(1, rep(0,9))
+dn_low_ing <- c(0,1,rep(0,8))
+conv_low_ing <- c(0,0,1,rep(0,7))
+sn_low_ing <- c(0,0,0,1,rep(0,6))
+mn_low_ing <- c(rep(0,4),1,(rep(0,5)))
+
+control_hi_ing <- c(rep(0,5),1,rep(0,4))
+dn_hi_ing <- c(rep(0,6),1,0,0,0)
+conv_hi_ing <- c(rep(0,7),1,0,0)
+sn_hi_ing <- c(rep(0,8),1,0)
+mn_hi_ing <- c(rep(0,9),1)
+```
+
+
+Effect of norm for people low vs high on ingroup identification across framing conditions
+
+#### Control framing
+```{r}
+two_way_ing <- contrast(combinations, 
+                       method = list("Low Ing: DN - C" = dn_low_ing - control_low_ing,
+                                     "Low Ing: Conv - C" = conv_low_ing - control_low_ing,
+                                     "Low Ing: SN - C" = sn_low_ing - control_low_ing,
+                                     "Low Ing: MN - C" = mn_low_ing - control_low_ing,
+                                     "Hi Ing: DN - C" = dn_hi_ing - control_hi_ing,
+                                     "Hi Ing: Conv - C" = conv_hi_ing - control_hi_ing,
+                                     "Hi Ing: SN - C" = sn_hi_ing - control_hi_ing,
+                                     "Hi Ing: MN - C" = mn_hi_ing - control_hi_ing), 
+                       adjust = "none")
+
+two_way_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+two_way_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+# effect sizes
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(combinations, 
+                       method = list("Low Ing: DN - C" = dn_low_ing - control_low_ing,
+                                     "Low Ing: Conv - C" = conv_low_ing - control_low_ing,
+                                     "Low Ing: SN - C" = sn_low_ing - control_low_ing,
+                                     "Low Ing: MN - C" = mn_low_ing - control_low_ing,
+                                     "Hi Ing: DN - C" = dn_hi_ing - control_hi_ing,
+                                     "Hi Ing: Conv - C" = conv_hi_ing - control_hi_ing,
+                                     "Hi Ing: SN - C" = sn_hi_ing - control_hi_ing,
+                                     "Hi Ing: MN - C" = mn_hi_ing - control_hi_ing), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) # need to fix
+```
+
 
 >>Exploratory Research Question 1: Is there a three-way interaction between in-group identification, framing condition, and norm-intervention condition?
 

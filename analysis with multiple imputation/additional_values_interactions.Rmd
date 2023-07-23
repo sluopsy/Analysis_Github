@@ -1,5 +1,5 @@
 ---
-title: "Analysis using Multiple Imputation (scmfcs)"
+title: "additional_values_interactions"
 output:
   word_document:
     toc: yes
@@ -1069,206 +1069,6 @@ complete_data <- complete(mids_obj, "long")
 ```
 
 
-# Descriptive Statistics
-
-n per Condition
-```{r}
-data_R_alt %>%
-  group_by(framing_condition, norm_condition) %>%
-  summarise(n = n()) %>% 
-  knitr::kable(digits = 2)
-
-data_R_alt %>%
-  group_by(norm_condition) %>%
-  summarise(n = n())
-
-data_R_alt %>%
-  group_by(framing_condition) %>%
-  summarise(n = n())
-```
-
-
-
-
-Descriptives for variables with NO missing data
-
-Variables with NO missing data:
-
-* ingroup_identification
-* clothing_interest
-* consumer_intentions
-* framing_condition
-* norm_condition
-
-```{r}
-with(mids_obj, psych::describe(clothing_interest)) # describe
-with(mids_obj, sd(clothing_interest)) # sd
-with(mids_obj, mlv(clothing_interest, method = "mfv")) # mode
-with(mids_obj, tab1(clothing_interest, decimal = 2, sort.group = "decreasing", graph = FALSE)) # frequency table
-with(mids_obj, hist(clothing_interest, main = "Histogram of Clothing Interest", xlab = "Clothing Interest", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.5)) # histogram
-
-
-with(mids_obj, psych::describe(ingroup_identification))
-with(mids_obj, sd(ingroup_identification))
-with(mids_obj, mlv(ingroup_identification, method = "mfv"))
-with(mids_obj, tab1(ingroup_identification, sort.group = "decreasing", graph = FALSE)) 
-with(mids_obj, hist(ingroup_identification, main = "Histogram of Ingroup Identification", xlab = "Ingroup Identification", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.5))
-
-
-with(mids_obj, psych::describe(consumer_intentions))
-with(mids_obj, sd(consumer_intentions))
-with(mids_obj, mlv(consumer_intentions, method = "mfv"))
-with(mids_obj, tab1(consumer_intentions, decimal = 2, sort.group = "decreasing", graph = FALSE))
-with(mids_obj, hist(consumer_intentions, main = "Histogram of Consumer Intentions", xlab = "Consumer Intentions", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.5)) 
-```
-
-Descriptive Statistics for Consumer Intentions
-```{r}
-data_R_alt %>%
-  group_by(framing_condition, norm_condition) %>%
-  summarise(mean = mean(consumer_intentions),
-            sd = sd(consumer_intentions)) %>% 
-  knitr::kable(digits = 2)
-```
-
-
-Descriptives for variables with missing data:
-
-* Biospheric values
-* Altruistic values
-* Egoistic values
-* Hedonic values
-* Self-deceptive enhancement
-* Impression management
-* Age
-
-* Gender
-* Consumer behaviors
-
-Values
-```{r}
-data_R_alt %>%
-  dplyr::select(biospheric) %>%
-  describe()
-
-with(mids_obj, psych::describe(biospheric)) # describe
-with(mids_obj, mean(biospheric)) # mean
-with(mids_obj, sd(biospheric)) # sd
-with(mids_obj, skew(biospheric)) # skew
-with(mids_obj, mlv(biospheric, method = "mfv")) # mode
-with(mids_obj, tab1(biospheric, decimal = 2, sort.group = "decreasing", graph = FALSE)) # frequency table
-
-
-data_R_alt %>%
-  dplyr::select(altruistic) %>%
-  describe()
-
-with(mids_obj, psych::describe(altruistic))
-with(mids_obj, mean(altruistic)) # mean
-with(mids_obj, sd(altruistic)) # sd
-with(mids_obj, skew(altruistic)) # skew
-with(mids_obj, mlv(altruistic, method = "mfv"))
-with(mids_obj, tab1(altruistic, sort.group = "decreasing", graph = FALSE)) 
-
-data_R_alt %>%
-  dplyr::select(egoistic) %>%
-  describe()
-
-with(mids_obj, psych::describe(egoistic))
-with(mids_obj, mean(egoistic)) # mean
-with(mids_obj, sd(egoistic)) # sd
-with(mids_obj, skew(egoistic)) # skew
-with(mids_obj, mlv(egoistic, method = "mfv"))
-with(mids_obj, tab1(egoistic, decimal = 2, sort.group = "decreasing", graph = FALSE))
-
-
-data_R_alt %>%
-  dplyr::select(hedonic) %>%
-  describe()
-
-with(mids_obj, psych::describe(hedonic))
-with(mids_obj, mean(hedonic)) # mean
-with(mids_obj, sd(hedonic)) # sd
-with(mids_obj, skew(hedonic)) # skew
-with(mids_obj, mlv(hedonic, method = "mfv"))
-with(mids_obj, tab1(hedonic, decimal = 2, sort.group = "decreasing", graph = FALSE))
-
-
-# plotting multiple histograms
-imp5_data <- complete_data %>% 
-  filter(.imp == 5)
-
-par(mfrow = c(2,2))
-
-hist(imp5_data$biospheric, main = "Histogram of Biospheric Values", xlab = "Biospheric Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2) # histogram
-
-hist(imp5_data$altruistic, main = "Histogram of Altruistic Values", xlab = "Altruistic Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
-
-hist(imp5_data$egoistic, main = "Histogram of Egoistic Values", xlab = "Egoistic Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
-
-hist(imp5_data$hedonic, main = "Histogram of Hedonic Values", xlab = "Hedonic Values", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
-
-par(mfrow = c(2,2))
-
-hist(data_R_alt$clothing_interest, main = "Histogram of Clothing Interest", xlab = "Clothing Interest", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2) # histogram
-
-hist(data_R_alt$ingroup_identification, main = "Histogram of In-group Identification", xlab = "In-group Identification", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
-
-hist(data_R_alt$consumer_intentions, main = "Histogram of Consumer Intentions", xlab = "Consumer Intentions", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
-
-hist(data_R_alt$Age, main = "Histogram of Age", xlab = "Age", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
-
-```
-
-
-Socially desirable responding & age
-```{r}
-data_R_alt %>%
-  dplyr::select(self_deceptive_sdr) %>%
-  describe()
-
-with(mids_obj, psych::describe(self_deceptive_sdr))
-with(mids_obj, mean(self_deceptive_sdr)) # mean
-with(mids_obj, sd(self_deceptive_sdr)) # sd
-with(mids_obj, skew(self_deceptive_sdr)) # skew
-with(mids_obj, mlv(self_deceptive_sdr, method = "mfv"))
-with(mids_obj, tab1(self_deceptive_sdr, decimal = 2, sort.group = "decreasing", graph = FALSE))
-
-data_R_alt %>%
-  dplyr::select(impress_manag_sdr) %>%
-  describe()
-
-with(mids_obj, psych::describe(impress_manag_sdr))
-with(mids_obj, mean(impress_manag_sdr)) # mean
-with(mids_obj, sd(impress_manag_sdr)) # sd
-with(mids_obj, skew(impress_manag_sdr)) # skew
-with(mids_obj, mlv(impress_manag_sdr, method = "mfv"))
-with(mids_obj, tab1(impress_manag_sdr, decimal = 2, sort.group = "decreasing", graph = FALSE))
-
-data_R_alt %>%
-  dplyr::select(Age) %>%
-  describe()
-
-with(mids_obj, psych::describe(Age))
-with(mids_obj, mean(Age)) # mean
-with(mids_obj, sd(Age)) # sd
-with(mids_obj, skew(Age)) # skew
-with(mids_obj, mlv(Age, method = "mfv"))
-with(mids_obj, tab1(Age, decimal = 2, sort.group = "decreasing", graph = FALSE))
-
-
-par(mfrow = c(2,2))
-
-hist(imp5_data$self_deceptive_sdr, main = "Histogram of Self-deceptive Enhancement", xlab = "Self-deceptive Enhancement", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
-
-hist(imp5_data$impress_manag_sdr, main = "Histogram of Impression Management", xlab = "Impression Management", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
-
-hist(imp5_data$Age, main = "Histogram of Age", xlab = "Age", ylab = "Frequency", cex.lab = 1.2, cex.main = 1.2)
-
-```
-
-
-
 
 # Regression Analysis (DV = Consumer Intentions)
 
@@ -1281,77 +1081,6 @@ mod_mice <- with(mids_obj, lm(consumer_intentions ~ framing_condition*norm_condi
 pool_obj <- pool(mod_mice)
 pool_obj
 ```
-
-
-## Pooled Regression Results
-
-Using `mice` package:
-```{r echo = FALSE}
-pool_summ <- summary(pool(mod_mice))
-pool_summ %>%
-  knitr::kable(digits = 3)
-```
-
-APA style table for regression summary
-```{r}
-apa_table(pool_summ,
-          caption = "Table 1 Pooled Regression Results",
-          note = "DV = Consumer Intentions")
-```
-
-
-## Standardized Regression Coefficients
-
-Using scale()
-```{r include = FALSE}
-mod_mice_std <- with(mids_obj, lm(scale(consumer_intentions) ~ framing_condition*norm_condition*scale(biospheric) + framing_condition*norm_condition*scale(altruistic) + framing_condition*norm_condition*scale(egoistic) + framing_condition*norm_condition*scale(hedonic) + framing_condition*norm_condition*scale(ingroup_identification) + scale(self_deceptive_sdr) + scale(impress_manag_sdr) + scale(clothing_interest) + Gender + scale(Age)))
-```
-
-
-```{r}
-pool_summ_std <- summary(pool(mod_mice_std))
-
-pool_summ_std %>%
-  knitr::kable(digits = 3)
-```
-
-APA style table for regression summary
-```{r}
-apa_table(pool_summ_std,
-          caption = "Table 1b Pooled Standardized Regression Results",
-          note = "DV = Consumer Intentions")
-```
-
-
-
-## Pooled Anova Results
-
-Using mi.anova()
-
-- Uses D2 test
-```{r include = FALSE}
-anova_mod3 <- mi.anova(mi.res = mids_obj, formula = "consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center", type = 3)
-```
-
-```{r}
-anova_mod3 %>%
-  knitr::kable(digits = c(2, 2, 2, 2, 3, 3, 3))
-```
-
-
-Using Anova()
-```{r include = FALSE, echo = FALSE, warning = FALSE}
-anova_mod2 <- with(mids_obj, Anova(lm(consumer_intentions ~ framing_condition*norm_condition*biospheric_center + framing_condition*norm_condition*altruistic_center + framing_condition*norm_condition*egoistic_center + framing_condition*norm_condition*hedonic_center + framing_condition*norm_condition*ingroup_center + self_dec_center + impress_manag_center + clothing_center + Gender + Age_center), type = "III"))
-```
-
-doesn't have a pooling option
-```{r}
-# anova_mod2
-```
-
-
-
-# Simple Effects
 
 Averaging scores across imputations
 ```{r}
@@ -1382,610 +1111,804 @@ average_df <- average_df %>%
 ```
 
 
-Labels to use with facet_wrap
-```{r}
-norm_labs <- c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")
-names(norm_labs) <- c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm")
 
-frame_labs <- c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")
-names(frame_labs) <- c("control_framing","pro_env_framing","self_enh_framing")
+
+
+# Simple effects
+
+## Biospheric values
+
+Storing low (-1SD) and high (+1SD) biospheric values
+```{r}
+sd_below <- mean(average_df$biospheric_center) - sd(average_df$biospheric_center)
+
+sd_above <- mean(average_df$biospheric_center) + sd(average_df$biospheric_center)
 ```
 
+### Overall effect
 
-Text Settings
+EMM for low and high bio
 ```{r}
-text_settings <- theme(text = element_text(size = 20)) +
-  theme(plot.title = element_text(size = 20, face = 'bold')) +
-  theme(axis.title.x = element_text(face = 'bold')) +
-  theme(axis.title.y = element_text(face = 'bold')) +
-  theme(axis.text.x = element_text(size = 20)) +
-  theme(axis.text.y = element_text(size = 20)) +
-  theme(axis.ticks = element_blank())
+# emmeans
+atlist <- list(biospheric_center = c(sd_below, sd_above))
+
+emms <- emmeans(mod_mice, ~ biospheric_center, at = atlist)
+emms %>% knitr::kable(digits = 2)
 ```
 
-## Estimated Marginal Means
+Compare EMM for low and high bio
 ```{r}
-cell_emmeans <- emmeans(mod_mice, ~ norm_condition*framing_condition)
-cell_emmeans %>%
-  knitr::kable(digits = c(NA,NA,2,2,2,2,3))
+# custom contrast
+low_bio <- c(1,0)
+hi_bio <- c(0,1)
 
-frame_emmeans <- emmeans(mod_mice, ~ framing_condition)
-frame_emmeans %>%
-  knitr::kable(digits = 2)
-
-norm_emmeans <- emmeans(mod_mice, ~ norm_condition)
-norm_emmeans %>%
-  knitr::kable(digits = 2)
-```
-
-
-## Framing Condition
-
->>H1: Consumer intentions/behaviors will be lower in the self-enhancing framing than in the pro-environmental or control framing conditions.
-
-Comparing each level of framing condition
-```{r}
-frame_emmeans
-
-# custom contrasts
-SE_F_EMM <- c(0,0,1)
-C_F_EMM <- c(1,0,0)
-PE_F_EMM <- c(0,1,0)
-
-framing_comparisons <- contrast(frame_emmeans, 
-                          method = list("SE Frame - Control Frame" = SE_F_EMM - C_F_EMM,
-                                        "SE Frame - PE Frame" = SE_F_EMM - PE_F_EMM,
-                                        "PE Frame - Control" = PE_F_EMM - C_F_EMM), adjust = "none")
-                          
-framing_comparisons %>%
-  knitr::kable(digits = c(NA,2,2,2,2,3))
+# compare
+effect_bio <- contrast(emms, method = list("High Bio - Low Bio" = hi_bio - low_bio), adjust = "none")
+effect_bio %>% knitr::kable(digits = c(NA,2,2,2,2,3))
 
 # confidence intervals
-framing_comparisons %>% confint() %>%
+effect_bio %>% confint() %>%
   knitr::kable(digits = 2)
 
 # effect sizes
 sigma_pool <- mean(pool_obj$glanced$sigma)
 df_resid_pool <- mean(pool_obj$glanced$df.residual)
 
-eff_size(framing_comparisons, sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
+eff_size(emms, method = list("High Bio - Low Bio" = hi_bio - low_bio), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
 ```
 
 
-Exploratory multiple comparisons
+### Framing Condition
+
+EMM for low vs high bio in each framing
 ```{r}
-# All pairwise comparisons of framing conditions
-frame_means2 <- emmeans(mod_mice, pairwise ~ framing_condition, adjust = "none")
+atlist <- list(biospheric_center = c(sd_below, sd_above))
 
-framing_comparisons2 <- contrast(frame_means2)
-framing_comparisons2 %>%
-  knitr::kable(digits = c(NA,2,2,2,2,3))
-
-# confidence intervals
-framing_comparisons2 %>% confint() %>%
-  knitr::kable(digits = 2)
-
-# effect sizes
-eff_size(framing_comparisons2, sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
+emms <- emmeans(mod_mice, ~ biospheric_center*framing_condition, at=atlist)
+emms %>% knitr::kable(digits = 2)
 ```
 
-
+Compare EMMs for low vs high bio in each framing 
 ```{r}
-# without data overlaid
-emmip(mod_mice, ~ framing_condition, CIs = TRUE, CIarg = list(lwd = 2, alpha = 0.5), xlab = "Framing Condition", ylab = "Consumer Intentions") + scale_x_discrete(breaks=c("control_framing","pro_env_framing","self_enh_framing"),
-        labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +theme_apa() + text_settings
-                                                                                                       
-# with data overlaid (scores averaged across imputations)
-emmip(mod_mice, ~ framing_condition, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.5), xlab = "Framing Condition", ylab = "Consumer Intentions") + geom_point(data = average_df, aes(x = framing_condition, y = consumer_intentions), alpha = 0.1, color = "blue") + scale_x_discrete(breaks=c("control_framing","pro_env_framing","self_enh_framing"),
-        labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa() + text_settings
-```
-
-
-
-
-
-## Norm Condition
-
->>H2: Consumer intentions/behaviors will be lower in each norm condition compared to the control norm condition.
-
-Comparing each level of norm condition
-```{r}
-norm_emmeans
-
 # custom contrasts
-Control_N_EMM <- c(1,0,0,0,0)
-DN_EMM <- c(0,1,0,0,0)
-Conv_EMM <- c(0,0,1,0,0)
-SN_EMM <- c(0,0,0,1,0)
-MN_EMM <- c(0,0,0,0,1)
+control_low_bio <- c(1,0,0,0,0,0)
+control_hi_bio <- c(0,1,0,0,0,0)
+proenv_low_bio <- c(0,0,1,0,0,0)
+proenv_hi_bio <- c(0,0,0,1,0,0)
+selfenh_low_bio <- c(0,0,0,0,1,0)
+self_enh_hi_bio <- c(0,0,0,0,0,1)
 
-norm_comparisons <- contrast(norm_emmeans, 
-                          method = list("Descriptive Norm - Control" = DN_EMM - Control_N_EMM,
-                                        "Convention - Control" = Conv_EMM - Control_N_EMM,
-                                        "Social Norm - Control" = SN_EMM - Control_N_EMM,
-                                        "Moral Norm - Control" = MN_EMM - Control_N_EMM), adjust = "none")
-
-                          
-norm_comparisons %>%
-  knitr::kable(digits = c(NA,2,2,2,2,3))
+# compare
+effect_frame_bio <- contrast(emms, method = list("Control: High Bio - Low Bio" = control_hi_bio - control_low_bio,
+                                                 "Pro-env: High Bio - Low Bio" = proenv_hi_bio - proenv_low_bio,
+                                                 "Self-enh: High Bio - Low Bio" = self_enh_hi_bio - selfenh_low_bio), adjust = "none")
+effect_frame_bio %>% knitr::kable(digits = c(NA,2,2,2,2,3))
 
 # confidence intervals
-norm_comparisons %>% confint() %>%
+effect_frame_bio %>% confint() %>%
   knitr::kable(digits = 2)
 
-# effect sizes
-eff_size(norm_comparisons, sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
-```
-
-Exploratory multiple comparisons
-```{r}
-# All pairwise comparisons of framing conditions
-norm_means2 <- emmeans(mod_mice, pairwise ~ norm_condition, adjust = "none")
-
-norm_comparisons2 <- contrast(norm_means2)
-norm_comparisons2 %>%
-  knitr::kable(digits = c(NA,2,2,2,2,3))
-
-# confidence intervals
-norm_comparisons2 %>% confint() %>%
-  knitr::kable(digits = 2)
 
 # effect sizes
-eff_size(norm_comparisons2, sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(emms, method = list("Control: High Bio - Low Bio" = control_hi_bio - control_low_bio,
+                                                 "Pro-env: High Bio - Low Bio" = proenv_hi_bio - proenv_low_bio,
+                                                 "Self-enh: High Bio - Low Bio" = self_enh_hi_bio - selfenh_low_bio), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
 ```
 
 
-```{r}
-# without data overlaid
-emmip(mod_mice, ~ norm_condition, CIs = TRUE, CIarg = list(lwd = 2, alpha = 0.5), xlab = "Norm Condition", ylab = "Consumer Intentions") + scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"),
-        labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa() + text_settings
+### Norm Condition
 
-# with data overlaid
-emmip(mod_mice, ~ norm_condition, CIs = TRUE, xlab = "Norm Condition", ylab = "Consumer Intentions") + geom_point(data = average_df, aes(x = norm_condition, y = consumer_intentions), alpha = 0.1, color = "blue") + scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + theme_apa() + text_settings
+EMM for low vs high bio in each norm
+```{r}
+atlist <- list(biospheric_center = c(sd_below, sd_above))
+
+emms <- emmeans(mod_mice, ~ biospheric_center*norm_condition, at=atlist)
+emms %>% knitr::kable(digits = 2)
 ```
 
-
-
-## Framing X Norm
-
->>H3: There will be a two-way interaction between framing & norm condition such that the effect of each norm will be stronger in the self-enhancing framing than in the pro-environmental or control framing conditions.
-
-Comparing differences in cell means
+Compare EMMs for low vs high bio in each framing 
 ```{r}
-cell_emmeans
-
 # custom contrasts
-cf_cn_emm <- c(1,rep(0,14)) ## control framings
-cf_dn_emm <- c(0,1,rep(0,13))
-cf_conv_emm <- c(0,0,1,rep(0,12))
-cf_sn_emm <- c(0,0,0,1,rep(0,11))
-cf_mn_emm <- c(0,0,0,0,1,rep(0,10))
+control_low_bio <- c(1,rep(0,9))
+control_hi_bio <- c(0,1,rep(0,8))
+dn_low_bio <- c(0,0,1,rep(0,7))
+dn_hi_bio <- c(0,0,0,1,rep(0,6))
+conv_low_bio <- c(0,0,0,0,1,rep(0,5))
+conv_hi_bio <- c(rep(0,5),1,rep(0,4))
+sn_low_bio <- c(rep(0,6),1,0,0,0)
+sn_hi_bio <- c(rep(0,7),1,0,0)
+mn_low_bio <- c(rep(0,8),1,0)
+mn_hi_bio <- c(rep(0,9),1)
 
-pf_cn_emm <- c(0,0,0,0,0,1,rep(0,9)) ## pro-environmental framings
-pf_dn_emm <- c(0,0,0,0,0,0,1,rep(0,8))
-pf_conv_emm <- c(rep(0,7),1,(rep(0,7)))
-pf_sn_emm <- c(rep(0,8),1,(rep(0,6)))
-pf_mn_emm <- c(rep(0,9),1,(rep(0,5)))
-
-sf_cn_emm <- c(rep(0,10),1,(rep(0,4))) ## self-enhancing framings
-sf_dn_emm <- c(rep(0,11),1,(rep(0,3)))
-sf_conv_emm <- c(rep(0,12),1,(rep(0,2)))
-sf_sn_emm <- c(rep(0,13),1,0)
-sf_mn_emm <- c(rep(0,14),1)
-
-FxN_comparisons <- contrast(cell_emmeans, 
-                          method = list("Control Frame + DN - Control Frame + Ctrl" = cf_dn_emm - cf_cn_emm,
-                                        "Control Frame + Conv - Control Frame + Ctrl" = cf_conv_emm - cf_cn_emm,
-                                        "Control Frame + SN - Control Frame + Ctrl" = cf_sn_emm - cf_cn_emm,
-                                        "Control Frame + MN - Control Frame + Ctrl" = cf_mn_emm - cf_cn_emm,
-                                        "PE Frame + DN - PE Frame + Ctrl" = pf_dn_emm - pf_cn_emm,
-                                        "PE Frame + Conv - PE Frame + Ctrl" = pf_conv_emm - pf_cn_emm,
-                                        "PE Frame + SN - PE Frame + Ctrl" = pf_sn_emm - pf_cn_emm,
-                                        "PE Frame + MN - PE Frame + Ctrl" = pf_mn_emm - pf_cn_emm,
-                                        "SE Frame + DN - SE Frame + Ctrl" = sf_dn_emm - sf_cn_emm,
-                                        "SE Frame + Conv - SE Frame + Ctrl" = sf_conv_emm - sf_cn_emm,
-                                        "SE Frame + SN - SE Frame + Ctrl" = sf_sn_emm - sf_cn_emm,
-                                        "SE Frame + MN - SE Frame + Ctrl" = sf_mn_emm - sf_cn_emm), adjust = "none")
-
-FxN_comparisons %>%
-  knitr::kable(digits = c(NA,2,2,2,2,3))
+# compare
+effect_norm_bio <- contrast(emms, method = list("Control: High Bio - Low Bio" = control_hi_bio - control_low_bio,
+                                                 "DN: High Bio - Low Bio" = dn_hi_bio - dn_low_bio,
+                                                 "Conv: High Bio - Low Bio" = conv_hi_bio - conv_low_bio,
+                                                 "SN: High Bio - Low Bio" = sn_hi_bio - sn_low_bio,
+                                                 "MN: High Bio - Low Bio" = mn_hi_bio - mn_low_bio), adjust = "none")
+effect_norm_bio %>% knitr::kable(digits = c(NA,2,2,2,2,3))
 
 # confidence intervals
-FxN_comparisons %>% confint() %>%
+effect_norm_bio %>% confint() %>%
   knitr::kable(digits = 2)
+
+# effect size
+eff_size(emms, method = list("Control: High Bio - Low Bio" = control_hi_bio - control_low_bio,
+                                                 "DN: High Bio - Low Bio" = dn_hi_bio - dn_low_bio,
+                                                 "Conv: High Bio - Low Bio" = conv_hi_bio - conv_low_bio,
+                                                 "SN: High Bio - Low Bio" = sn_hi_bio - sn_low_bio,
+                                                 "MN: High Bio - Low Bio" = mn_hi_bio - mn_low_bio), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
 ```
 
 
-Comparing each norm condition across framing conditions
+
+
+
+
+
+## Altruistic values
+
+Storing low (-1SD) and high (+1SD) altruistic values
 ```{r}
-cell_emmeans
+sd_below <- mean(average_df$altruistic_center) - sd(average_df$altruistic_center)
 
-# custom contrasts
-cf_cn_emm <- c(1,rep(0,14)) ## control framings
-cf_dn_emm <- c(0,1,rep(0,13))
-cf_conv_emm <- c(0,0,1,rep(0,12))
-cf_sn_emm <- c(0,0,0,1,rep(0,11))
-cf_mn_emm <- c(0,0,0,0,1,rep(0,10))
+sd_above <- mean(average_df$altruistic_center) + sd(average_df$altruistic_center)
+```
 
-pf_cn_emm <- c(0,0,0,0,0,1,rep(0,9)) ## pro-environmental framings
-pf_dn_emm <- c(0,0,0,0,0,0,1,rep(0,8))
-pf_conv_emm <- c(rep(0,7),1,(rep(0,7)))
-pf_sn_emm <- c(rep(0,8),1,(rep(0,6)))
-pf_mn_emm <- c(rep(0,9),1,(rep(0,5)))
+### Overall effect
 
-sf_cn_emm <- c(rep(0,10),1,(rep(0,4))) ## self-enhancing framings
-sf_dn_emm <- c(rep(0,11),1,(rep(0,3)))
-sf_conv_emm <- c(rep(0,12),1,(rep(0,2)))
-sf_sn_emm <- c(rep(0,13),1,0)
-sf_mn_emm <- c(rep(0,14),1)
+EMM for low and high alt
+```{r}
+# emmeans
+atlist <- list(altruistic_center = c(sd_below, sd_above))
 
+emms <- emmeans(mod_mice, ~ altruistic_center, at = atlist)
+emms %>% knitr::kable(digits = 2)
+```
 
-norm_across_framing <- contrast(cell_emmeans, method = list("Control: PE vs Control" = pf_cn_emm - cf_cn_emm,
-                                                        "Control: SE vs Control" = sf_cn_emm - cf_cn_emm,
-                                                        "Control: PE vs SE" = pf_cn_emm - sf_cn_emm,
-                                                        "DN: PE vs Control" = pf_dn_emm - cf_dn_emm,
-                                                        "DN: SE vs Control" = sf_dn_emm - cf_dn_emm,
-                                                        "DN: PE vs SE" = pf_dn_emm - sf_dn_emm,
-                                                        "Conv: PE vs Control" = pf_conv_emm - cf_conv_emm,
-                                                        "Conv: SE vs Control" = sf_conv_emm - cf_conv_emm,
-                                                        "Conv: PE vs SE" = pf_conv_emm - sf_conv_emm,
-                                                        "SN: PE vs Control" = pf_sn_emm - cf_sn_emm,
-                                                        "SN: SE vs Control" = sf_sn_emm - cf_sn_emm,
-                                                        "SN: PE vs SE" = pf_sn_emm - sf_sn_emm,
-                                                        "MN: PE vs Control" = pf_mn_emm - cf_mn_emm,
-                                                        "MN: SE vs Control" = sf_mn_emm - cf_mn_emm,
-                                                        "MN: PE vs SE" = pf_mn_emm - sf_mn_emm), adjust = "none")
+Compare EMM for low and high alt
+```{r}
+# custom contrast
+low_alt <- c(1,0)
+hi_alt <- c(0,1)
 
+# compare
+effect_alt <- contrast(emms, method = list("High alt - Low alt" = hi_alt - low_alt), adjust = "none")
+effect_alt %>% knitr::kable(digits = c(NA,2,2,2,2,3))
 
-norm_across_framing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
-
-# confidencce intervals
-norm_across_framing %>%
-  confint() %>%
+# confidence intervals
+effect_alt %>% confint() %>%
   knitr::kable(digits = 2)
 
 # effect sizes
-eff_size(cell_emmeans, method = list("Control: PE vs Control" = pf_cn_emm - cf_cn_emm,
-                                                        "Control: SE vs Control" = sf_cn_emm - cf_cn_emm,
-                                                        "Control: PE vs SE" = pf_cn_emm - sf_cn_emm,
-                                     "DN: PE vs Control" = pf_dn_emm - cf_dn_emm,
-                                                        "DN: SE vs Control" = sf_dn_emm - cf_dn_emm,
-                                                        "DN: PE vs SE" = pf_dn_emm - sf_dn_emm,
-                                                        "Conv: PE vs Control" = pf_conv_emm - cf_conv_emm,
-                                                        "Conv: SE vs Control" = sf_conv_emm - cf_conv_emm,
-                                                        "Conv: PE vs SE" = pf_conv_emm - sf_conv_emm,
-                                                        "SN: PE vs Control" = pf_sn_emm - cf_sn_emm,
-                                                        "SN: SE vs Control" = sf_sn_emm - cf_sn_emm,
-                                                        "SN: PE vs SE" = pf_sn_emm - sf_sn_emm,
-                                                        "MN: PE vs Control" = pf_mn_emm - cf_mn_emm,
-                                                        "MN: SE vs Control" = sf_mn_emm - cf_mn_emm,
-                                                        "MN: PE vs SE" = pf_mn_emm - sf_mn_emm), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(emms, method = list("High alt - Low alt" = hi_alt - low_alt), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
 ```
 
 
-```{r}
-# without data overlaid
-emmip(mod_mice, framing_condition ~ norm_condition, CIs = TRUE, CIarg = list(lwd = 2, alpha = 0.5), xlab = "Norm Condition", ylab = "Consumer Intentions") + scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"),
-        labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) + theme_apa() + text_settings
+### Framing Condition
 
-# with data overlaid
-emmip(mod_mice, ~ norm_condition | framing_condition, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.5), xlab = "Norm Condition", ylab = "Consumer Intentions") + geom_point(data = average_df, aes(x = norm_condition, y = consumer_intentions, color = norm_condition), alpha = 0.2, show.legend = FALSE) + scale_x_discrete(breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"),
-        labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) + theme_apa() + text_settings
+EMM for low vs high alt in each framing
+```{r}
+atlist <- list(altruistic_center = c(sd_below, sd_above))
+
+emms <- emmeans(mod_mice, ~ altruistic_center*framing_condition, at=atlist)
+emms %>% knitr::kable(digits = 2)
 ```
 
-
-
-
-## All control/framing conditions compared to control/control condition
-
->> Exploratory RQ2: Which combination of framing and norm condition produced the strongest reductions in consumer intentions compared to the control condition?
-
+Compare EMMs for low vs high alt in each framing 
 ```{r}
-cell_emmeans
-
 # custom contrasts
-cf_cn_emm <- c(1,rep(0,14)) ## control framings
-cf_dn_emm <- c(0,1,rep(0,13))
-cf_conv_emm <- c(0,0,1,rep(0,12))
-cf_sn_emm <- c(0,0,0,1,rep(0,11))
-cf_mn_emm <- c(0,0,0,0,1,rep(0,10))
+control_low_alt <- c(1,0,0,0,0,0)
+control_hi_alt <- c(0,1,0,0,0,0)
+proenv_low_alt <- c(0,0,1,0,0,0)
+proenv_hi_alt <- c(0,0,0,1,0,0)
+selfenh_low_alt <- c(0,0,0,0,1,0)
+self_enh_hi_alt <- c(0,0,0,0,0,1)
 
-pf_cn_emm <- c(0,0,0,0,0,1,rep(0,9)) ## pro-environmental framings
-pf_dn_emm <- c(0,0,0,0,0,0,1,rep(0,8))
-pf_conv_emm <- c(rep(0,7),1,(rep(0,7)))
-pf_sn_emm <- c(rep(0,8),1,(rep(0,6)))
-pf_mn_emm <- c(rep(0,9),1,(rep(0,5)))
-
-sf_cn_emm <- c(rep(0,10),1,(rep(0,4))) ## self-enhancing framings
-sf_dn_emm <- c(rep(0,11),1,(rep(0,3)))
-sf_conv_emm <- c(rep(0,12),1,(rep(0,2)))
-sf_sn_emm <- c(rep(0,13),1,0)
-sf_mn_emm <- c(rep(0,14),1)
-
-RQ2 <- contrast(cell_emmeans, 
-                          method = list("Pro-env Frame + Control vs Control" = pf_cn_emm - cf_cn_emm,
-                                        "Pro-env Frame + DN vs Control" = pf_dn_emm - cf_cn_emm,
-                                        "Pro-env Frame + Conv vs Control" = pf_conv_emm - cf_cn_emm,
-                                        "Pro-env Frame + SN vs Control" = pf_sn_emm - cf_cn_emm,
-                                        "Pro-env Frame + MN vs Control" = pf_mn_emm - cf_cn_emm,
-                                        "Self-enh Frame + Control vs Control" = sf_cn_emm - cf_cn_emm,
-                                        "Self-enh Frame + DN vs Control" = sf_dn_emm - cf_cn_emm,
-                                        "Self-enh Frame + Conv vs Control" = sf_conv_emm - cf_cn_emm,
-                                        "Self-enh Frame + SN vs Control" = sf_sn_emm - cf_cn_emm,
-                                        "Self-enh Frame + MN vs Control" = sf_mn_emm - cf_cn_emm), adjust = "sidak")
-
-RQ2 %>%
-  knitr::kable(digits = c(NA,2,2,2,2,3))
+# compare
+effect_frame_alt <- contrast(emms, method = list("Control: High alt - Low alt" = control_hi_alt - control_low_alt,
+                                                 "Pro-env: High alt - Low alt" = proenv_hi_alt - proenv_low_alt,
+                                                 "Self-enh: High alt - Low alt" = self_enh_hi_alt - selfenh_low_alt), adjust = "none")
+effect_frame_alt %>% knitr::kable(digits = c(NA,2,2,2,2,3))
 
 # confidence intervals
-RQ2 %>% confint() %>%
+effect_frame_alt %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+# effect sizes
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(emms, method = list("Control: High alt - Low alt" = control_hi_alt - control_low_alt,
+                                                 "Pro-env: High alt - Low alt" = proenv_hi_alt - proenv_low_alt,
+                                                 "Self-enh: High alt - Low alt" = self_enh_hi_alt - selfenh_low_alt), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
+```
+
+
+### Norm Condition
+
+EMM for low vs high alt in each norm
+```{r}
+atlist <- list(altruistic_center = c(sd_below, sd_above))
+
+emms <- emmeans(mod_mice, ~ altruistic_center*norm_condition, at=atlist)
+emms %>% knitr::kable(digits = 2)
+```
+
+Compare EMMs for low vs high alt in each framing 
+```{r}
+# custom contrasts
+control_low_alt <- c(1,rep(0,9))
+control_hi_alt <- c(0,1,rep(0,8))
+dn_low_alt <- c(0,0,1,rep(0,7))
+dn_hi_alt <- c(0,0,0,1,rep(0,6))
+conv_low_alt <- c(0,0,0,0,1,rep(0,5))
+conv_hi_alt <- c(rep(0,5),1,rep(0,4))
+sn_low_alt <- c(rep(0,6),1,0,0,0)
+sn_hi_alt <- c(rep(0,7),1,0,0)
+mn_low_alt <- c(rep(0,8),1,0)
+mn_hi_alt <- c(rep(0,9),1)
+
+# compare
+effect_norm_alt <- contrast(emms, method = list("Control: High alt - Low alt" = control_hi_alt - control_low_alt,
+                                                 "DN: High alt - Low alt" = dn_hi_alt - dn_low_alt,
+                                                 "Conv: High alt - Low alt" = conv_hi_alt - conv_low_alt,
+                                                 "SN: High alt - Low alt" = sn_hi_alt - sn_low_alt,
+                                                 "MN: High alt - Low alt" = mn_hi_alt - mn_low_alt), adjust = "none")
+effect_norm_alt %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+effect_norm_alt %>% confint() %>%
+  knitr::kable(digits = 2)
+
+# effect size
+eff_size(emms, method = list("Control: High alt - Low alt" = control_hi_alt - control_low_alt,
+                                                 "DN: High alt - Low alt" = dn_hi_alt - dn_low_alt,
+                                                 "Conv: High alt - Low alt" = conv_hi_alt - conv_low_alt,
+                                                 "SN: High alt - Low alt" = sn_hi_alt - sn_low_alt,
+                                                 "MN: High alt - Low alt" = mn_hi_alt - mn_low_alt), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
+```
+
+
+
+
+
+## Egoistic values
+
+Storing low (-1SD) and high (+1SD) egoistic values
+```{r}
+sd_below <- mean(average_df$egoistic_center) - sd(average_df$egoistic_center)
+
+sd_above <- mean(average_df$egoistic_center) + sd(average_df$egoistic_center)
+```
+
+### Overall effect
+
+EMM for low and high ego
+```{r}
+# emmeans
+atlist <- list(egoistic_center = c(sd_below, sd_above))
+
+emms <- emmeans(mod_mice, ~ egoistic_center, at = atlist)
+emms %>% knitr::kable(digits = 2)
+```
+
+Compare EMM for low and high ego
+```{r}
+# custom contrast
+low_ego <- c(1,0)
+hi_ego <- c(0,1)
+
+# compare
+effect_ego <- contrast(emms, method = list("High ego - Low ego" = hi_ego - low_ego), adjust = "none")
+effect_ego %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+effect_ego %>% confint() %>%
   knitr::kable(digits = 2)
 
 # effect sizes
-eff_size(cell_emmeans, method = list("Pro-env Frame + Control vs Control" = pf_cn_emm - cf_cn_emm,
-                                        "Pro-env Frame + DN vs Control" = pf_dn_emm - cf_cn_emm,
-                                        "Pro-env Frame + Conv vs Control" = pf_conv_emm - cf_cn_emm,
-                                        "Pro-env Frame + SN vs Control" = pf_sn_emm - cf_cn_emm,
-                                        "Pro-env Frame + MN vs Control" = pf_mn_emm - cf_cn_emm,
-                                        "Self-enh Frame + Control vs Control" = sf_cn_emm - cf_cn_emm,
-                                        "Self-enh Frame + DN vs Control" = sf_dn_emm - cf_cn_emm,
-                                        "Self-enh Frame + Conv vs Control" = sf_conv_emm - cf_cn_emm,
-                                        "Self-enh Frame + SN vs Control" = sf_sn_emm - cf_cn_emm,
-                                        "Self-enh Frame + MN vs Control" = sf_mn_emm - cf_cn_emm), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2)
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(emms, method = list("High ego - Low ego" = hi_ego - low_ego), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
 ```
 
 
+### Framing Condition
+
+EMM for low vs high ego in each framing
 ```{r}
-emmip(mod_mice, framing_condition ~ norm_condition, CIs = FALSE, xlab = "Norm Condition", ylab = "Consumer Intentions")
+atlist <- list(egoistic_center = c(sd_below, sd_above))
+
+emms <- emmeans(mod_mice, ~ egoistic_center*framing_condition, at=atlist)
+emms %>% knitr::kable(digits = 2)
 ```
 
-
+Compare EMMs for low vs high ego in each framing 
 ```{r}
-emmip(mod_mice, framing_condition ~ norm_condition, CIs = FALSE, xlab = "Norm Condition", ylab = "Consumer Intentions")
-```
+# custom contrasts
+control_low_ego <- c(1,0,0,0,0,0)
+control_hi_ego <- c(0,1,0,0,0,0)
+proenv_low_ego <- c(0,0,1,0,0,0)
+proenv_hi_ego <- c(0,0,0,1,0,0)
+selfenh_low_ego <- c(0,0,0,0,1,0)
+self_enh_hi_ego <- c(0,0,0,0,0,1)
 
+# compare
+effect_frame_ego <- contrast(emms, method = list("Control: High ego - Low ego" = control_hi_ego - control_low_ego,
+                                                 "Pro-env: High ego - Low ego" = proenv_hi_ego - proenv_low_ego,
+                                                 "Self-enh: High ego - Low ego" = self_enh_hi_ego - selfenh_low_ego), adjust = "none")
+effect_frame_ego %>% knitr::kable(digits = c(NA,2,2,2,2,3))
 
-
-
-
-
-# Exploratory Analyses
-
-## Effect of framings across norm conditions 
-
-Comparing consumer intentions for each norm condition between each framing condition:
-```{r}
-# Control norm
-chosen_values <- list(norm_condition = c("control_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
-
-control_norm_means <- emmeans(mod_mice, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "none")
-
-control_norm_means$emmeans %>% 
+# confidence intervals
+effect_frame_ego %>% confint() %>%
   knitr::kable(digits = 2)
 
-control_norm_means$contrasts %>%
-  knitr::kable(digits = c(NA,2,2,2,2,3))
 
-eff_size(control_norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
-  knitr::kable(digits = 2)
+# effect sizes
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(emms, method = list("Control: High ego - Low ego" = control_hi_ego - control_low_ego,
+                                                 "Pro-env: High ego - Low ego" = proenv_hi_ego - proenv_low_ego,
+                                                 "Self-enh: High ego - Low ego" = self_enh_hi_ego - selfenh_low_ego), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
 ```
 
 
+### Norm Condition
 
+EMM for low vs high ego in each norm
 ```{r}
-# Descriptive norm
-chosen_values <- list(norm_condition = c("descriptive_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
+atlist <- list(egoistic_center = c(sd_below, sd_above))
 
-descr_norm_means <- emmeans(mod_mice, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "none")
-
-descr_norm_means$emmeans %>%
-  knitr::kable(digits = 2)
-
-descr_norm_means$contrasts %>%
-  knitr::kable(digits = c(NA,2,2,2,2,3))
-
-eff_size(descr_norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
-  knitr::kable(digits = 2)
+emms <- emmeans(mod_mice, ~ egoistic_center*norm_condition, at=atlist)
+emms %>% knitr::kable(digits = 2)
 ```
 
-
-
+Compare EMMs for low vs high ego in each framing 
 ```{r}
-# Convention norm
-chosen_values <- list(norm_condition = c("convention_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
+# custom contrasts
+control_low_ego <- c(1,rep(0,9))
+control_hi_ego <- c(0,1,rep(0,8))
+dn_low_ego <- c(0,0,1,rep(0,7))
+dn_hi_ego <- c(0,0,0,1,rep(0,6))
+conv_low_ego <- c(0,0,0,0,1,rep(0,5))
+conv_hi_ego <- c(rep(0,5),1,rep(0,4))
+sn_low_ego <- c(rep(0,6),1,0,0,0)
+sn_hi_ego <- c(rep(0,7),1,0,0)
+mn_low_ego <- c(rep(0,8),1,0)
+mn_hi_ego <- c(rep(0,9),1)
 
-conv_norm_means <- emmeans(mod_mice, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "none")
+# compare
+effect_norm_ego <- contrast(emms, method = list("Control: High ego - Low ego" = control_hi_ego - control_low_ego,
+                                                 "DN: High ego - Low ego" = dn_hi_ego - dn_low_ego,
+                                                 "Conv: High ego - Low ego" = conv_hi_ego - conv_low_ego,
+                                                 "SN: High ego - Low ego" = sn_hi_ego - sn_low_ego,
+                                                 "MN: High ego - Low ego" = mn_hi_ego - mn_low_ego), adjust = "none")
+effect_norm_ego %>% knitr::kable(digits = c(NA,2,2,2,2,3))
 
-conv_norm_means$emmeans %>%
-  knitr::kable(digits = 2)
-
-conv_norm_means$contrasts %>%
-  knitr::kable(digits = c(NA,2,2,2,2,3))
-
-eff_size(conv_norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
-  knitr::kable(digits = 2)
-```
-
-
-
-```{r}
-# Social norm
-chosen_values <- list(norm_condition = c("social_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
-
-soc_norm_means <- emmeans(mod_mice, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "none")
-
-soc_norm_means$emmeans %>%
+# confidence intervals
+effect_norm_ego %>% confint() %>%
   knitr::kable(digits = 2)
 
-soc_norm_means$contrasts %>%
-  knitr::kable(digits = c(NA,2,2,2,2,3))
+# effect size
+eff_size(emms, method = list("Control: High ego - Low ego" = control_hi_ego - control_low_ego,
+                                                 "DN: High ego - Low ego" = dn_hi_ego - dn_low_ego,
+                                                 "Conv: High ego - Low ego" = conv_hi_ego - conv_low_ego,
+                                                 "SN: High ego - Low ego" = sn_hi_ego - sn_low_ego,
+                                                 "MN: High ego - Low ego" = mn_hi_ego - mn_low_ego), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
+```
 
-eff_size(soc_norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
+
+
+
+
+
+## Hedonic values
+
+Storing low (-1SD) and high (+1SD) hedonic values
+```{r}
+sd_below <- mean(average_df$hedonic_center) - sd(average_df$hedonic_center)
+
+sd_above <- mean(average_df$hedonic_center) + sd(average_df$hedonic_center)
+```
+
+### Overall effect
+
+EMM for low and high hed
+```{r}
+# emmeans
+atlist <- list(hedonic_center = c(sd_below, sd_above))
+
+emms <- emmeans(mod_mice, ~ hedonic_center, at = atlist)
+emms %>% knitr::kable(digits = 2)
+```
+
+Compare EMM for low and high hed
+```{r}
+# custom contrast
+low_hed <- c(1,0)
+hi_hed <- c(0,1)
+
+# compare
+effect_hed <- contrast(emms, method = list("High hed - Low hed" = hi_hed - low_hed), adjust = "none")
+effect_hed %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+effect_hed %>% confint() %>%
   knitr::kable(digits = 2)
+
+# effect sizes
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(emms, method = list("High hed - Low hed" = hi_hed - low_hed), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
 ```
 
 
+### Framing Condition
 
+EMM for low vs high hed in each framing
 ```{r}
-# Moral norm
-chosen_values <- list(norm_condition = c("moral_norm"), framing_condition = c("control_framing", "pro_env_framing", "self_enh_framing"))
+atlist <- list(hedonic_center = c(sd_below, sd_above))
 
-moral_norm_means <- emmeans(mod_mice, pairwise ~ norm_condition*framing_condition, at = chosen_values, adjust = "none")
+emms <- emmeans(mod_mice, ~ hedonic_center*framing_condition, at=atlist)
+emms %>% knitr::kable(digits = 2)
+```
 
-moral_norm_means$emmeans %>%
+Compare EMMs for low vs high hed in each framing 
+```{r}
+# custom contrasts
+control_low_hed <- c(1,0,0,0,0,0)
+control_hi_hed <- c(0,1,0,0,0,0)
+proenv_low_hed <- c(0,0,1,0,0,0)
+proenv_hi_hed <- c(0,0,0,1,0,0)
+selfenh_low_hed <- c(0,0,0,0,1,0)
+self_enh_hi_hed <- c(0,0,0,0,0,1)
+
+# compare
+effect_frame_hed <- contrast(emms, method = list("Control: High hed - Low hed" = control_hi_hed - control_low_hed,
+                                                 "Pro-env: High hed - Low hed" = proenv_hi_hed - proenv_low_hed,
+                                                 "Self-enh: High hed - Low hed" = self_enh_hi_hed - selfenh_low_hed), adjust = "none")
+effect_frame_hed %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+effect_frame_hed %>% confint() %>%
   knitr::kable(digits = 2)
 
-moral_norm_means$contrasts %>%
-  knitr::kable(digits = c(NA,2,2,2,2,3))
 
-eff_size(moral_norm_means, sigma = sigma_pool, edf = df_resid_pool) %>%
+# effect sizes
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(emms, method = list("Control: High hed - Low hed" = control_hi_hed - control_low_hed,
+                                                 "Pro-env: High hed - Low hed" = proenv_hi_hed - proenv_low_hed,
+                                                 "Self-enh: High hed - Low hed" = self_enh_hi_hed - selfenh_low_hed), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
+```
+
+
+### Norm Condition
+
+EMM for low vs high hed in each norm
+```{r}
+atlist <- list(hedonic_center = c(sd_below, sd_above))
+
+emms <- emmeans(mod_mice, ~ hedonic_center*norm_condition, at=atlist)
+emms %>% knitr::kable(digits = 2)
+```
+
+Compare EMMs for low vs high hed in each framing 
+```{r}
+# custom contrasts
+control_low_hed <- c(1,rep(0,9))
+control_hi_hed <- c(0,1,rep(0,8))
+dn_low_hed <- c(0,0,1,rep(0,7))
+dn_hi_hed <- c(0,0,0,1,rep(0,6))
+conv_low_hed <- c(0,0,0,0,1,rep(0,5))
+conv_hi_hed <- c(rep(0,5),1,rep(0,4))
+sn_low_hed <- c(rep(0,6),1,0,0,0)
+sn_hi_hed <- c(rep(0,7),1,0,0)
+mn_low_hed <- c(rep(0,8),1,0)
+mn_hi_hed <- c(rep(0,9),1)
+
+# compare
+effect_norm_hed <- contrast(emms, method = list("Control: High hed - Low hed" = control_hi_hed - control_low_hed,
+                                                 "DN: High hed - Low hed" = dn_hi_hed - dn_low_hed,
+                                                 "Conv: High hed - Low hed" = conv_hi_hed - conv_low_hed,
+                                                 "SN: High hed - Low hed" = sn_hi_hed - sn_low_hed,
+                                                 "MN: High hed - Low hed" = mn_hi_hed - mn_low_hed), adjust = "none")
+effect_norm_hed %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+effect_norm_hed %>% confint() %>%
   knitr::kable(digits = 2)
+
+# effect size
+eff_size(emms, method = list("Control: High hed - Low hed" = control_hi_hed - control_low_hed,
+                                                 "DN: High hed - Low hed" = dn_hi_hed - dn_low_hed,
+                                                 "Conv: High hed - Low hed" = conv_hi_hed - conv_low_hed,
+                                                 "SN: High hed - Low hed" = sn_hi_hed - sn_low_hed,
+                                                 "MN: High hed - Low hed" = mn_hi_hed - mn_low_hed), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
 ```
 
 
 
-## Gender Interactions 
 
-Gender X Norm
+
+
+# Ingroup identification
+
+## Storing low (-1SD) and high (+1SD) ingroup identification
 ```{r}
-emmeans(mod_mice, ~ norm_condition*Gender*framing_condition, adjust = "none")
-
-emmip(mod_mice, norm_condition ~ Gender, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) +theme_apa() + text_settings
+sd_below <- mean(average_df$ingroup_center) - sd(average_df$ingroup_center)
+sd_above <- mean(average_df$ingroup_center) + sd(average_df$ingroup_center)
 ```
 
-Gender X Framing
+## Overall effect
+
+EMM for low and high ingroup
 ```{r}
-emmip(mod_mice, framing_condition ~ Gender, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Framing Condition", breaks=c("control_framing","pro_env_framing","self_enh_framing"), labels=c("Control Framing", "Pro-environmental Framing", "Self-enhancing Framing")) +theme_apa() + text_settings
+# emmeans
+atlist <- list(ingroup_center = c(sd_below, sd_above))
+
+emms <- emmeans(mod_mice, ~ ingroup_center, at = atlist)
+emms %>% knitr::kable(digits = 2)
 ```
 
-Gender X Norm X Framing
+Compare EMM for low and high ing
 ```{r}
-emmip(mod_mice, norm_condition ~ Gender | framing_condition, CIs = TRUE, CIarg = list(lwd = 1, alpha = 0.8), xlab = "Gender", ylab = "Consumer Intentions") + scale_colour_discrete(name = "Norm Condition", breaks=c("control_norm","descriptive_norm", "convention_norm", "social_norm", "moral_norm"), labels=c("Control Norm", "Descriptive Norm", "Convention", "Social Norm", "Moral Norm")) + facet_wrap(~framing_condition, labeller = labeller(framing_condition = frame_labs)) +theme_apa() + text_settings
+# custom contrast
+low_ing <- c(1,0)
+hi_ing <- c(0,1)
+
+# compare
+effect_ing <- contrast(emms, method = list("High ing - Low ing" = hi_ing - low_ing), adjust = "none")
+effect_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+effect_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+# effect sizes
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(emms, method = list("High ing - Low ing" = hi_ing - low_ing), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
 ```
 
 
+### Framing Condition
 
-# Post-hoc Power Analysis 
-
-- Using final sample size (n = 1133) and a small effect size
-
-from Cohen (1988):
-
-f2 = R^2/(1 - R^2)
-R2 = f^2/(1 + f^2)
-
-Small: f2 = .02, Small: R2 = .02
-
-
-Model A (full model): PA = 95
-Denominator df: n-PA = 1133-95 = 1038
-
-Effects where numerator df: PA-PC = 4
-
-  * Main effect of norm
-  * Values X norm interactions
-  * Ingroup x norm interactions
+EMM for low vs high ing in each framing
 ```{r}
-# If effect size were small and df_resid = 1038
-pwr.f2.test(u = 4, # Numerator df (PA-PC) 
-            v = 1038, # Denominator df (n - PA)
-            f2 = .02, 
-            sig.level = .05,
-            power = NULL) # power = .97
+atlist <- list(ingroup_center = c(sd_below, sd_above))
+
+emms <- emmeans(mod_mice, ~ ingroup_center*framing_condition, at=atlist)
+emms %>% knitr::kable(digits = 2)
 ```
 
-
-Effects where numerator df: PA-PC = 2
-
-  * Main effect of framing
-  * Values X framing interactions
-  * Ingroup x framing interactions
+Compare EMMs for low vs high ing in each framing 
 ```{r}
-# If effect size were small and df_resid = 1038
-pwr.f2.test(u = 2, # Numerator df (PA-PC) 
-            v = 1038, # Denominator df (n - PA)
-            f2 = .02, 
-            sig.level = .05,
-            power = NULL) # power = .99
+# custom contrasts
+control_low_ing <- c(1,0,0,0,0,0)
+control_hi_ing <- c(0,1,0,0,0,0)
+proenv_low_ing <- c(0,0,1,0,0,0)
+proenv_hi_ing <- c(0,0,0,1,0,0)
+selfenh_low_ing <- c(0,0,0,0,1,0)
+self_enh_hi_ing <- c(0,0,0,0,0,1)
+
+# compare
+effect_frame_ing <- contrast(emms, method = list("Control: High ing - Low ing" = control_hi_ing - control_low_ing,
+                                                 "Pro-env: High ing - Low ing" = proenv_hi_ing - proenv_low_ing,
+                                                 "Self-enh: High ing - Low ing" = self_enh_hi_ing - selfenh_low_ing), adjust = "none")
+effect_frame_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+effect_frame_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+
+# effect sizes
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(emms, method = list("Control: High ing - Low ing" = control_hi_ing - control_low_ing,
+                                                 "Pro-env: High ing - Low ing" = proenv_hi_ing - proenv_low_ing,
+                                                 "Self-enh: High ing - Low ing" = self_enh_hi_ing - selfenh_low_ing), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
 ```
 
 
-Effects where numerator df: PA-PC = 8
+### Norm Condition
 
-  * Norm x Framing interaction
-  * Values X framing x norm interactions
-  * Ingroup x framing x norm interactions
+EMM for low vs high ing in each norm
 ```{r}
-# If effect size were small and df_resid = 1038
-pwr.f2.test(u = 8, # Numerator df (PA-PC) 
-            v = 1038, # Denominator df (n - PA)
-            f2 = .02, 
-            sig.level = .05,
-            power = NULL) # power = .93
+atlist <- list(ingroup_center = c(sd_below, sd_above))
+
+emms <- emmeans(mod_mice, ~ ingroup_center*norm_condition, at=atlist)
+emms %>% knitr::kable(digits = 2)
+```
+
+Compare EMMs for low vs high ing in each framing 
+```{r}
+# custom contrasts
+control_low_ing <- c(1,rep(0,9))
+control_hi_ing <- c(0,1,rep(0,8))
+dn_low_ing <- c(0,0,1,rep(0,7))
+dn_hi_ing <- c(0,0,0,1,rep(0,6))
+conv_low_ing <- c(0,0,0,0,1,rep(0,5))
+conv_hi_ing <- c(rep(0,5),1,rep(0,4))
+sn_low_ing <- c(rep(0,6),1,0,0,0)
+sn_hi_ing <- c(rep(0,7),1,0,0)
+mn_low_ing <- c(rep(0,8),1,0)
+mn_hi_ing <- c(rep(0,9),1)
+
+# compare
+effect_norm_ing <- contrast(emms, method = list("Control: High ing - Low ing" = control_hi_ing - control_low_ing,
+                                                 "DN: High ing - Low ing" = dn_hi_ing - dn_low_ing,
+                                                 "Conv: High ing - Low ing" = conv_hi_ing - conv_low_ing,
+                                                 "SN: High ing - Low ing" = sn_hi_ing - sn_low_ing,
+                                                 "MN: High ing - Low ing" = mn_hi_ing - mn_low_ing), adjust = "none")
+effect_norm_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+effect_norm_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+# effect size
+eff_size(emms, method = list("Control: High ing - Low ing" = control_hi_ing - control_low_ing,
+                                                 "DN: High ing - Low ing" = dn_hi_ing - dn_low_ing,
+                                                 "Conv: High ing - Low ing" = conv_hi_ing - conv_low_ing,
+                                                 "SN: High ing - Low ing" = sn_hi_ing - sn_low_ing,
+                                                 "MN: High ing - Low ing" = mn_hi_ing - mn_low_ing), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) 
 ```
 
 
-Effects where numerator df: PA-PC = 1
 
-  * Biospheric values
-  * Altruistic values
-  * Egoistic values
-  * Hedonic values
-  * Ingroup identification
-  * Self-deceptive enhancement
-  * Impression management
-  * Clothing interest
-  * Age
-  * Gender
+## Ingroup by Norm interaction
+
+### Storing low (-1SD) and high (+1SD) ingroup identification
+```{r}
+sd_below <- mean(average_df$ingroup_center) - sd(average_df$ingroup_center)
+sd_above <- mean(average_df$ingroup_center) + sd(average_df$ingroup_center)
+```
+
+
+### Calculate EM Means 
+```{r}
+atlist <- list(ingroup_center = c(sd_below, sd_above))
+
+combinations <- emmeans(mod_mice, ~ norm_condition*ingroup_center, at=atlist)
+
+combinations %>% knitr::kable(digits = 2)
+```
+
+
+### Custom contrasts
+```{r}
+control_low_ing <- c(1, rep(0,9))
+dn_low_ing <- c(0,1,rep(0,8))
+conv_low_ing <- c(0,0,1,rep(0,7))
+sn_low_ing <- c(0,0,0,1,rep(0,6))
+mn_low_ing <- c(rep(0,4),1,(rep(0,5)))
+
+control_hi_ing <- c(rep(0,5),1,rep(0,4))
+dn_hi_ing <- c(rep(0,6),1,0,0,0)
+conv_hi_ing <- c(rep(0,7),1,0,0)
+sn_hi_ing <- c(rep(0,8),1,0)
+mn_hi_ing <- c(rep(0,9),1)
+```
+
+
+Effect of norm for people low vs high on ingroup identification across framing conditions
+
+#### Control framing
+```{r}
+two_way_ing <- contrast(combinations, 
+                       method = list("Low Ing: DN - C" = dn_low_ing - control_low_ing,
+                                     "Low Ing: Conv - C" = conv_low_ing - control_low_ing,
+                                     "Low Ing: SN - C" = sn_low_ing - control_low_ing,
+                                     "Low Ing: MN - C" = mn_low_ing - control_low_ing,
+                                     "Hi Ing: DN - C" = dn_hi_ing - control_hi_ing,
+                                     "Hi Ing: Conv - C" = conv_hi_ing - control_hi_ing,
+                                     "Hi Ing: SN - C" = sn_hi_ing - control_hi_ing,
+                                     "Hi Ing: MN - C" = mn_hi_ing - control_hi_ing), 
+                       adjust = "none")
+
+two_way_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+two_way_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+# effect sizes
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(combinations, 
+                       method = list("Low Ing: DN - C" = dn_low_ing - control_low_ing,
+                                     "Low Ing: Conv - C" = conv_low_ing - control_low_ing,
+                                     "Low Ing: SN - C" = sn_low_ing - control_low_ing,
+                                     "Low Ing: MN - C" = mn_low_ing - control_low_ing,
+                                     "Hi Ing: DN - C" = dn_hi_ing - control_hi_ing,
+                                     "Hi Ing: Conv - C" = conv_hi_ing - control_hi_ing,
+                                     "Hi Ing: SN - C" = sn_hi_ing - control_hi_ing,
+                                     "Hi Ing: MN - C" = mn_hi_ing - control_hi_ing), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) # need to fix
+```
+
+
+
+## Ingroup by framing interaction
+
+### Calculate EM Means 
+```{r}
+atlist <- list(ingroup_center = c(sd_below, sd_above))
+
+combinations <- emmeans(mod_mice, ~ framing_condition*ingroup_center, at=atlist)
+
+combinations %>% knitr::kable(digits = 2)
+```
+
+
+### Custom contrasts
+```{r}
+control_low_ing <- c(1, rep(0,5))
+pe_low_ing <- c(0,1,rep(0,4))
+se_low_ing <- c(0,0,1,rep(0,3))
+
+control_hi_ing <- c(0,0,0,1,0,0)
+pe_hi_ing <- c(0,0,0,0,1,0)
+se_hi_ing <- c(rep(0,5),1)
+```
+
+
+Effect of norm for people low vs high on ingroup identification across framing conditions
+
+#### Control framing
+```{r}
+two_way_ing <- contrast(combinations, 
+                       method = list("Low Ing: PE - C" = pe_low_ing - control_low_ing,
+                                     "Low Ing: SE - C" = se_low_ing - control_low_ing,
+                                     "Low Ing: PE - SE" = pe_low_ing - se_low_ing,
+                                     "Hi Ing: PE - C" = pe_hi_ing - control_hi_ing,
+                                     "Hi Ing: SE - C" = se_hi_ing - control_hi_ing,
+                                     "Hi Ing: PE - SE" = pe_hi_ing - se_hi_ing), 
+                       adjust = "none")
+
+two_way_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
+
+# confidence intervals
+two_way_ing %>% confint() %>%
+  knitr::kable(digits = 2)
+
+# effect sizes
+sigma_pool <- mean(pool_obj$glanced$sigma)
+df_resid_pool <- mean(pool_obj$glanced$df.residual)
+
+eff_size(combinations, 
+                       method = list("Low Ing: PE - C" = pe_low_ing - control_low_ing,
+                                     "Low Ing: SE - C" = se_low_ing - control_low_ing,
+                                     "Low Ing: PE - SE" = pe_low_ing - se_low_ing,
+                                     "Hi Ing: PE - C" = pe_hi_ing - control_hi_ing,
+                                     "Hi Ing: SE - C" = se_hi_ing - control_hi_ing,
+                                     "Hi Ing: PE - SE" = pe_hi_ing - se_hi_ing), sigma = sigma_pool, edf = df_resid_pool) %>% knitr::kable(digits = 2) # need to fix
+```
+
+
+
+
+# Correlations between values dimensions
 
 ```{r}
-# If effect size were small and df_resid = 1038
-pwr.f2.test(u = 1, # Numerator df (PA-PC) 
-            v = 1038, # Denominator df (n - PA)
-            f2 = .02, 
-            sig.level = .05,
-            power = NULL) # power = .995
+data_R_alt %>%
+  dplyr::select(biospheric, altruistic, egoistic, hedonic) %>%
+  cor(use = "pairwise.complete.obs")
 ```
-
-
-Checking p-values from Pooled ANOVA table
-```{r}
-# p-value for biospheric values
-pf(60.76, df1 = 1, df2 = 182541.21, lower.tail = FALSE)
-
-# p-value for framing condition
-pf(1.94, df1 = 2, df2 = 277911.15, lower.tail = FALSE)
-```
-
-Q: Which of the pooled ANOVA effects would be significant if the non-adjusted denominator df, 1038, were used?
-
-df1 = 1:
-
-* F-critical value when df1 = 1 & df2 = 1038: Fcv = 3.8504
-
-* F-critical value when df1 = 1 & df2 = 9999: Fcv = 3.8424
-
-
-
-df1 = 2:
-
-* F-critical value when df1 = 2 & df2 = 1038: Fcv = 3.0044
-
-* F-critical value when df1 = 2 & df2 = 9999: Fcv = 2.9966
-
-
-
-df1 = 4:
-
-* F-critical value when df1 = 4 & df2 = 1038: Fcv = 2.3805
-
-* F-critical value when df1 = 4 & df2 = 9999: Fcv = 2.3728
-
-
-
-df1 = 8:
-
-* F-critical value when df1 = 8 & df2 = 1038: Fcv = 1.9473
-
-* F-critical value when df1 = 8 & df2 = 9999: Fcv = 1.9393
 
