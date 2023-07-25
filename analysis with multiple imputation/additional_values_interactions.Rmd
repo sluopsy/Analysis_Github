@@ -1772,6 +1772,9 @@ eff_size(emms, method = list("Control: High ing - Low ing" = control_hi_ing - co
 
 
 
+
+# updated ingroup interaction examinations
+
 ## Ingroup by Norm interaction
 
 ### Storing low (-1SD) and high (+1SD) ingroup identification
@@ -1807,9 +1810,7 @@ mn_hi_ing <- c(rep(0,9),1)
 ```
 
 
-Effect of norm for people low vs high on ingroup identification across framing conditions
 
-#### Control framing
 ```{r}
 two_way_ing <- contrast(combinations, 
                        method = list("Low Ing: DN - C" = dn_low_ing - control_low_ing,
@@ -1857,7 +1858,7 @@ combinations %>% knitr::kable(digits = 2)
 ```
 
 
-### Custom contrasts
+Custom contrasts
 ```{r}
 control_low_ing <- c(1, rep(0,5))
 pe_low_ing <- c(0,1,rep(0,4))
@@ -1869,9 +1870,6 @@ se_hi_ing <- c(rep(0,5),1)
 ```
 
 
-Effect of norm for people low vs high on ingroup identification across framing conditions
-
-#### Control framing
 ```{r}
 two_way_ing <- contrast(combinations, 
                        method = list("Low Ing: PE - C" = pe_low_ing - control_low_ing,
@@ -1904,11 +1902,4 @@ eff_size(combinations,
 
 
 
-# Correlations between values dimensions
-
-```{r}
-data_R_alt %>%
-  dplyr::select(biospheric, altruistic, egoistic, hedonic) %>%
-  cor(use = "pairwise.complete.obs")
-```
 

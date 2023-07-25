@@ -1270,6 +1270,10 @@ hist(imp5_data$Age, main = "Histogram of Age", xlab = "Age", ylab = "Frequency",
 
 
 
+
+
+
+
 # Regression Analysis (DV = Consumer Intentions)
 
 ## Running Model

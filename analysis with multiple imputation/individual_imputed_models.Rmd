@@ -2150,3 +2150,47 @@ Anova(mod_mice_imp4, type = 3) %>%
 Anova(mod_mice_imp5, type = 3) %>%
   knitr::kable(digits = 8)
 ```
+
+
+
+Correlation matrix
+```{r}
+data_imp1 %>%
+  dplyr::select(biospheric, altruistic, egoistic, hedonic, ingroup_identification, clothing_interest, self_deceptive_sdr, impress_manag_sdr, Age, consumer_intentions) %>%
+  cor() %>%
+  knitr::kable(digits = 2)
+
+
+data_imp2 %>%
+  dplyr::select(biospheric, altruistic, egoistic, hedonic, ingroup_identification, clothing_interest, self_deceptive_sdr, impress_manag_sdr, Age, consumer_intentions) %>%
+  cor() %>%
+  knitr::kable(digits = 2)
+
+
+data_imp3 %>%
+  dplyr::select(biospheric, altruistic, egoistic, hedonic, ingroup_identification, clothing_interest, self_deceptive_sdr, impress_manag_sdr, Age, consumer_intentions) %>%
+  cor() %>%
+  knitr::kable(digits = 2)
+
+
+data_imp4 %>%
+  dplyr::select(biospheric, altruistic, egoistic, hedonic, ingroup_identification, clothing_interest, self_deceptive_sdr, impress_manag_sdr, Age, consumer_intentions) %>%
+  cor() %>%
+  knitr::kable(digits = 2)
+
+
+data_imp5 %>%
+  dplyr::select(biospheric, altruistic, egoistic, hedonic, ingroup_identification, clothing_interest, self_deceptive_sdr, impress_manag_sdr, Age, consumer_intentions) %>%
+  cor() %>%
+  knitr::kable(digits = 2)
+```
+
+
+
+
+Combining Correlations across Imputed Data Sets
+```{r}
+micombine.cor(mids_obj, variables = c("biospheric", "altruistic", "egoistic", "hedonic", "ingroup_identification", "clothing_interest", "self_deceptive_sdr", "impress_manag_sdr", "Age", "consumer_intentions"), method = "pearson") %>%
+  knitr::kable(digits = 2)
+```
+

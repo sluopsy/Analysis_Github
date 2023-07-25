@@ -2662,7 +2662,7 @@ controlframe_lowvshi_ing <- contrast(combinations,
                                      "CF/Conv/HiIng - CF/CN/HiIng" = cf_conv_hi_ing - cf_cn_hi_ing,
                                      "CF/SN/HiIng - CF/CN/HiIng" = cf_sn_hi_ing - cf_cn_hi_ing,
                                      "CF/MN/HiIng - CF/CN/HiIng" = cf_mn_hi_ing - cf_cn_hi_ing), 
-                       adjust = "none")
+                       adjust = "sidak")
 
 controlframe_lowvshi_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
 
@@ -2734,7 +2734,7 @@ proenvframe_lowvshi_ing <- contrast(combinations,
                                      "PF/Conv/HiIng - PF/CN/HiIng" = pf_conv_hi_ing - pf_cn_hi_ing,
                                      "PF/SN/HiIng - PF/CN/HiIng" = pf_sn_hi_ing - pf_cn_hi_ing,
                                      "PF/MN/HiIng - PF/CN/HiIng" = pf_mn_hi_ing - pf_cn_hi_ing), 
-                       adjust = "none")
+                       adjust = "sidak")
 
 proenvframe_lowvshi_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
 
@@ -2803,7 +2803,7 @@ selfenhframe_lowvshi_ing <- contrast(combinations,
                                      "SF/Conv/HiIng - SF/CN/HiIng" = sf_conv_hi_ing - sf_cn_hi_ing,
                                      "SF/SN/HiIng - SF/CN/HiIng" = sf_sn_hi_ing - sf_cn_hi_ing,
                                      "SF/MN/HiIng - SF/CN/HiIng" = sf_mn_hi_ing - sf_cn_hi_ing), 
-                       adjust = "none")
+                       adjust = "sidak")
 
 selfenhframe_lowvshi_ing %>% knitr::kable(digits = c(NA,2,2,2,2,3))
 
@@ -3013,6 +3013,11 @@ emmip(mod_mice, ingroup_center ~ norm_condition | framing_condition, CIs = TRUE,
   scale_color_manual(name = "Ingroup Identification", breaks = c(-1.01218644014995, 1.01218644014995), labels = c("-1SD Ingroup", "+1SD Ingroup"), values = c("#00BFC4","#C77CFF"))
   
 ```
+
+
+
+
+
 
 
 # Exploratory Analyses
