@@ -4515,3 +4515,76 @@ two_way_ing %>% knitr::kable(digits = c(NA,2,2,2,2,2,3))
 two_way_ing %>% confint() %>%
   knitr::kable(digits = 2)
 ```
+
+
+
+
+# Additional norm X framing interaction 
+
+Looking at differences for the same norm-intervention condition across framing conditions
+
+Comparing each norm condition across framing conditions
+
+
+## Estimated marginal probabilities
+```{r}
+cell_emmeans_logit <- emmeans(log_mice, ~ norm_condition*framing_condition)
+cell_emmeans_logit %>%
+  knitr::kable(digits = c(NA,NA,2,2,2,2,3))
+
+cell_emmeans_prob <- emmeans(log_mice, ~ norm_condition*framing_condition, type = "response")
+cell_emmeans_prob %>%
+  knitr::kable(digits = c(NA,NA,2,2,2,2,3))
+```
+
+
+## Custom contrasts
+```{r}
+# custom contrasts
+cf_cn_emm <- c(1,rep(0,14)) ## control framings
+cf_dn_emm <- c(0,1,rep(0,13))
+cf_conv_emm <- c(0,0,1,rep(0,12))
+cf_sn_emm <- c(0,0,0,1,rep(0,11))
+cf_mn_emm <- c(0,0,0,0,1,rep(0,10))
+
+pf_cn_emm <- c(0,0,0,0,0,1,rep(0,9)) ## pro-environmental framings
+pf_dn_emm <- c(0,0,0,0,0,0,1,rep(0,8))
+pf_conv_emm <- c(rep(0,7),1,(rep(0,7)))
+pf_sn_emm <- c(rep(0,8),1,(rep(0,6)))
+pf_mn_emm <- c(rep(0,9),1,(rep(0,5)))
+
+sf_cn_emm <- c(rep(0,10),1,(rep(0,4))) ## self-enhancing framings
+sf_dn_emm <- c(rep(0,11),1,(rep(0,3)))
+sf_conv_emm <- c(rep(0,12),1,(rep(0,2)))
+sf_sn_emm <- c(rep(0,13),1,0)
+sf_mn_emm <- c(rep(0,14),1)
+```
+
+
+## Contrasting norms across framings
+```{r}
+norm_across_framing <- contrast(cell_emmeans_prob, method = list("Control: PE vs Control" = pf_cn_emm - cf_cn_emm,
+                                                        "Control: SE vs Control" = sf_cn_emm - cf_cn_emm,
+                                                        "Control: PE vs SE" = pf_cn_emm - sf_cn_emm,
+                                                        "DN: PE vs Control" = pf_dn_emm - cf_dn_emm,
+                                                        "DN: SE vs Control" = sf_dn_emm - cf_dn_emm,
+                                                        "DN: PE vs SE" = pf_dn_emm - sf_dn_emm,
+                                                        "Conv: PE vs Control" = pf_conv_emm - cf_conv_emm,
+                                                        "Conv: SE vs Control" = sf_conv_emm - cf_conv_emm,
+                                                        "Conv: PE vs SE" = pf_conv_emm - sf_conv_emm,
+                                                        "SN: PE vs Control" = pf_sn_emm - cf_sn_emm,
+                                                        "SN: SE vs Control" = sf_sn_emm - cf_sn_emm,
+                                                        "SN: PE vs SE" = pf_sn_emm - sf_sn_emm,
+                                                        "MN: PE vs Control" = pf_mn_emm - cf_mn_emm,
+                                                        "MN: SE vs Control" = sf_mn_emm - cf_mn_emm,
+                                                        "MN: PE vs SE" = pf_mn_emm - sf_mn_emm), adjust = "none")
+
+
+norm_across_framing %>% knitr::kable(digits = c(NA,2,2,2,2,2,3))
+
+# confidence intervals
+norm_across_framing %>%
+  confint() %>%
+  knitr::kable(digits = 2)
+```
+
